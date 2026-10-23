@@ -1,0 +1,16 @@
+{
+  "name": "flood-finder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Community incident mapping and emergency response coordination",
+  "type": "module",
+  "engines": {"node": ">=22.13.0"},
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "admin": "node scripts/admin.js"
+  },
+  "license": "MIT"
+}
+
