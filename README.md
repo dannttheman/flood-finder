@@ -9,7 +9,9 @@ Community reports are public: latitude/longitude, descriptions and any address/l
 
 ## Safety and scope
 
-Flood Finder is a **coordination aid**, not a 911 service, government dispatch authority, official evacuation order, automatic flood prediction system, or an alternative to NWS/municipal advisories. It serves as a hub for people in a community to help report incidents during hurricanes, tropical storms, or other severe weather events. Officials can take advantage of this app to track and monitor when certain incidents appear, as well as deliver informed messages to their area. The application also uses real time weather data in compound with crowdsourced information. Public reports start `reported` and remain unverified until reviewed. Estimated route geometry from OSRM is **not verified flood-safe**. Do not use the platform as a sole source for immediate life-safety decisions. Always call local emergency services for life-threatening situations.
+Flood Finder is a **coordination aid**, is not intended as an emergency services provider. It is an experimental application not yet intended for or verified as a commercial monitoring tool. 
+
+Flood finder serves as the hub for people in a community to help report incidents during hurricanes, tropical storms, or other severe weather events. Officials can take advantage of this app to track and monitor when certain incidents appear, as well as deliver informed messages to their area. The application also uses real time weather data in compound with crowdsourced information. Public reports start `reported` and remain unverified until reviewed. Estimated route geometry from OSRM is **not verified flood-safe**. Do not use the platform as a sole source for immediate life-safety decisions. Always call local emergency services for life-threatening situations.
 
 ## Project layout
 
@@ -23,6 +25,44 @@ public/favicon.svg  Brand mark
 scripts/admin.js    Secure administrator bootstrap
  test/api.test.js   End-to-end HTTP API integration tests
 ```
+## Run locally
+
+1. Install **Node.js 22.13 or later** (the built-in `node:sqlite` module is required). No `npm install` or database account is needed.
+2. From this folder run:
+
+   ```sh
+   npm start
+   ```
+
+3. Open **http://localhost:3000**.
+4. Register your account using the UI. Accounts default to `resident` (this prevents arbitrary admin signup).
+5. Stop the server, promote the initial administrator, and restart:
+
+   ```sh
+   npm run admin -- promote you@example.com
+   npm start
+   ```
+
+   You can also run the command from a second terminal while the server is running. **Sign out and sign back in** to refresh the UI. The admin command revokes old sessions.
+6. As admin, open **Command center** to create response teams and give selected accounts the `responder` role. Assign a responder account as a team lead, enter real base coordinates, and dispatch the team to an incident. Team leads see their work in **My assignments**.
+
+```sh
+npm test
+```
+
+## Configuration
+
+Copy `.env.example` as a reference. Set environment variables in your shell or hosting provider. Node does **not** automatically read `.env` files; if you want local `.env` loading with Node 22 use `node --env-file=.env server.js`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP port |
+| `DATABASE_PATH` | `./data/flood-finder.sqlite` | Durable SQLite location; **mount a persistent volume in production** |
+| `NODE_ENV` | `development` | `production` sets cookies `Secure`; requires HTTPS front-end |
+| `TRUST_PROXY` | `0` | Set `1` **only** behind a trusted reverse proxy that overwrites client forwarding headers |
+| `NWS_AREAS` | `FL` | State code for official alerts (e.g. `FL`, `NC`, `TX`) |
+| `NWS_USER_AGENT` | Sample | Replace with a public contact as recommended by NWS |
+| `OSRM_URL` | `https://router.project-osrm.org` | Road route engine (demo public endpoint is not suitable for guaranteed production dispatch) |
 
 ## API quick reference
 
