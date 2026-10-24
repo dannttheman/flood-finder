@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-async function browserHarness(){
+async function browserHarness(search=''){
   const nodes=new Map(),requests=[];
   const node=selector=>{
-    if(!nodes.has(selector))nodes.set(selector,{value:'',checked:false,hidden:true,textContent:'',innerHTML:'',dataset:{},classList:{remove(){},toggle(){}},setAttribute(){},removeAttribute(){},addEventListener(){}});
+    if(!nodes.has(selector))nodes.set(selector,{value:'',checked:false,hidden:true,textContent:'',innerHTML:'',dataset:{},classList:{remove(){},toggle(){}},setAttribute(){},removeAttribute(){},addEventListener(){},showModal(){this.open=true;}});
     return nodes.get(selector);
   };
   node('#sortFilter').value='priority';
@@ -18,13 +18,14 @@ async function browserHarness(){
   let events;
   const context=vm.createContext({
     document:{querySelector:node,querySelectorAll:()=>[],addEventListener(){},body:{addEventListener(){}},visibilityState:'visible'},
-    location:{hash:'#home'},window:{scrollTo(){},addEventListener(){}},console,Date,Set,Number,String,Promise,
+    location:{hash:'#home',search,pathname:'/',origin:'http://localhost'},URL,URLSearchParams,window:{scrollTo(){},addEventListener(){}},console,Date,Set,Number,String,Promise,
     setTimeout,clearTimeout,setInterval:()=>0,navigator:{},
     EventSource:class{constructor(){events=this;this.listeners={};}addEventListener(name,fn){this.listeners[name]=fn;}},
     fetch:async path=>{
       requests.push(path);
       const responses={
         '/api/auth/me':{user:{id:'resident',name:'Test resident',role:'resident'}},
+        '/api/incidents/new':{incident:incidents[0],updates:[]},
         '/api/incidents':{incidents},'/api/incidents/mine':{incidents:[incidents[0]]},
         '/api/stats':{active:2,critical:1,resolved:1,total:3},
         '/api/alerts':{alerts:[],status:'live',area:'FL',fetchedAt:'2026-10-23T12:00:00Z'}
@@ -99,4 +100,16 @@ test('report resource links use category-specific trusted sources and a useful f
   assert.match(driver.reportResource('unknown'),/redcross.org/);
   assert.match(driver.reportResource('unknown',true),/weather.gov\/safety\//);
   assert.match(driver.reportResource('flood'),/rel="noopener noreferrer"/);
+});
+
+test('shared community record opens its original submission and separates advice from evidence',async()=>{
+  const browser=await browserHarness('?incident=new');
+  assert.ok(browser.requests.includes('/api/incidents/new'));
+  assert.equal(browser.node('#incidentDialog').open,true);
+  const html=browser.node('#incidentDetailContent').innerHTML;
+  assert.match(html,/SOURCE \/ USER SUBMISSION/);
+  assert.match(html,/No external source citation is attached/);
+  assert.match(html,/http:\/\/localhost\/\?incident=new#map/);
+  assert.match(html,/General advice, not evidence/);
+  assert.doesNotMatch(html,/Could not load incident/);
 });

@@ -9,10 +9,10 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=source-clarity-1">
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script defer src="/vendor/awesomplete.js"></script>
-  <script defer src="/app.js"></script>
+  <script defer src="/app.js?v=source-clarity-1"></script>
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to content</a>
@@ -37,6 +37,7 @@
       <div class="map-workspace">
         <aside class="incident-panel">
           <div class="panel-heading"><div><span class="overline">THE AREA AT A GLANCE</span><h2>Local feed <span id="feedCount">0</span></h2></div><button class="icon-button" id="clearFilters" title="Clear filters" aria-label="Clear filters">↺</button></div>
+          <p class="feed-source-note">Shaded areas: official NWS alerts. Pins: user submissions; new reports are unverified.</p>
           <div class="source-tabs" role="group" aria-label="Situation sources"><button type="button" data-source-filter="all" aria-pressed="true">All sources</button><button type="button" data-source-filter="official" aria-pressed="false">Official</button><button type="button" data-source-filter="community" aria-pressed="false">Community</button></div>
           <details class="filter-drawer" id="filterOptions"><summary><span>Refine the map</span><span class="filter-summary-mark">+</span></summary><div class="filter-drawer-content">          <label class="official-type-filter">Official hazard type<select id="hazardTypeFilter"><option value="">All official hazards</option><option value="flood">Flooding</option><option value="storm">Severe storms</option><option value="wind">Wind / dust</option><option value="fire">Fire weather</option><option value="winter">Winter / cold</option><option value="heat">Heat</option><option value="marine">Coastal / marine</option><option value="other">Other official alerts</option></select></label>
           <label class="search-input"><span>⌕</span><input type="search" id="searchFilter" placeholder="Search reports or area…" aria-label="Search incidents"></label>
@@ -69,7 +70,7 @@
       <div class="help-grid">
         <article><span>01 / SEARCH</span><h2>Choose an area</h2><p>Enter a five-digit ZIP (ZIP+4 also works) or a full U.S. street address and select Locate, then choose a radius. Or pan the map and select Search this map. The dashed circle marks your search area. Panning alone does not change the search.</p></article>
         <article><span>02 / OFFICIAL AREAS</span><h2>Read the affected region</h2><p>Shaded regions come from National Weather Service warnings, watches, advisories, and statements. Click one for issuer text, timing, and instructions. A dashed boundary represents an affected zone, which may be broader than the actual hazard. A shape is not a claim that every street inside it is damaged.</p><p>When the provider has no usable boundary, a relevant notice stays in the list without an invented pin. No returned alert does not establish safety.</p></article>
-        <article><span>03 / COMMUNITY PINS</span><h2>See reported conditions</h2><p>Community pins describe flooding, access issues, outages, debris, shelter needs, and safety concerns people have submitted. New reports are unverified. Click a pin or list item to read the description and review history.</p><p>This app does not automatically detect every emergency or turn a temperature/rain reading into a disaster report.</p></article>
+        <article><span>03 / COMMUNITY PINS</span><h2>See reported conditions</h2><p>Community pins describe flooding, access issues, outages, debris, shelter needs, and safety concerns people have submitted. New reports are unverified. Click a pin or list item to read the user submission, its original record link, and review history. No external citation is attached to community submissions. Safety guidance links offer general advice, not proof of that event.</p><p>This app does not automatically detect every emergency or turn a temperature/rain reading into a disaster report.</p></article>
         <article><span>04 / FILTER</span><h2>Choose the evidence you want</h2><p>Switch between All sources, Official, and Community. The official-type filter applies to official hazards. Community type buttons can be combined; Community status, priority, sorting, and Only my reports apply to submissions. Text search can match either source. The reset arrow clears filters, while keeping your area and radius.</p></article>
         <article><span>05 / REPORT</span><h2>Use an address</h2><p>Sign in and select Report a situation. Choose the type and severity, write a factual title and description, and enter a full street address. Publish resolves the address before submitting—no map click is required. If several addresses match, choose the right one.</p><p>The address goes to the U.S. Census geocoder; your account and report description do not. Report content and locations are public. Avoid personal names, phone numbers, and medical details.</p></article>
         <article><span>06 / ADJUST A LOCATION</span><h2>Use the optional map</h2><p>For an addressless situation or a correction, expand the optional map section. Place/drag a marker, type coordinates, or use your device location with permission. Editing the address clears old coordinates. After submission, the search centers on your report.</p></article>

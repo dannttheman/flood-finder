@@ -216,7 +216,7 @@ function reportResource(category,official=false){
     shelter:['https://www.redcross.org/get-help/disaster-relief-and-recovery-services/find-an-open-shelter.html','American Red Cross · Find shelter']
   };
   const [url,label]=links[category]||(official?['https://www.weather.gov/safety/','NWS · Safety resources']:['https://www.redcross.org/get-help/disaster-relief-and-recovery-services.html','American Red Cross · Disaster assistance']);
-  return `<a class="resource-link" href="${url}" target="_blank" rel="noopener noreferrer"><span>View resources<small>${label}</small></span><span aria-hidden="true">↗</span></a>`;
+  return `<a class="resource-link" href="${url}" target="_blank" rel="noopener noreferrer"><span>Safety guidance<small>${label} · General advice, not evidence for this report</small></span><span aria-hidden="true">↗</span></a>`;
 }
 function setupAddressAutocomplete(kind){
   if(typeof Awesomplete==='undefined')return;
@@ -320,7 +320,7 @@ function renderIncidents(){
   state.filtered=sourceFilter==='official'?[]:filteredIncidents();state.visibleHazards=filteredHazards();
   $('#feedCount').textContent=state.filtered.length+state.visibleHazards.length;
   const official=state.visibleHazards.map(h=>`<button class="incident-item official-item" data-hazard-id="${escapeHtml(h.id)}" type="button"><span class="source-label official-source">OFFICIAL · NWS</span><div class="incident-item-top"><strong>${escapeHtml(h.event)}</strong><span class="status-tag">${escapeHtml(h.severity)}</span></div><p class="incident-description">${escapeHtml(h.headline||h.area)}</p><div class="incident-meta"><span>${h.geometrySource==='affected_zone'?'Affected zone':h.geometry?'Alert boundary':'Area notice · no boundary'}</span><span>Until ${shortDate(h.expires)}</span></div></button>`).join('');
-  const community=state.filtered.map(i=>`<button class="incident-item" data-open-id="${i.id}" type="button"><span class="source-label">COMMUNITY · ${escapeHtml(statusLabel(i.status))}</span><div class="incident-item-top">${severityPill(i)}<span class="status-tag">${escapeHtml(categories[i.category])}</span></div><div class="incident-title">${escapeHtml(i.title)}</div><p class="incident-description">${escapeHtml(i.description)}</p><div class="incident-meta"><span>${escapeHtml(i.address||'Pinned location')}</span><span>${shortDate(i.created_at)}</span></div></button>`).join('');
+  const community=state.filtered.map(i=>`<button class="incident-item" data-open-id="${i.id}" type="button"><span class="source-label">USER SUBMISSION · ${escapeHtml(statusLabel(i.status))}</span><div class="incident-item-top">${severityPill(i)}<span class="status-tag">${escapeHtml(categories[i.category])}</span></div><div class="incident-title">${escapeHtml(i.title)}</div><p class="incident-description">${escapeHtml(i.description)}</p><div class="incident-meta"><span>${escapeHtml(i.address||'Pinned location')}</span><span>${shortDate(i.created_at)}</span></div></button>`).join('');
   $('#incidentFeed').innerHTML=official+community||'<div class="empty-state"><strong>No matching situations to display.</strong><br>Try another source, type, search radius, or location. This does not establish that the area is safe.</div>';
   if(!state.map)return;
   state.markers?.clearLayers();
@@ -392,11 +392,12 @@ async function openIncident(ident){
   try{
     const data=await api('/api/incidents/'+encodeURIComponent(ident));const i=data.incident;
     state.selected=i;
+    const reportLink=new URL(location.pathname,location.origin);reportLink.searchParams.set('incident',i.id);reportLink.hash='map';
     const navigate=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(i.lat+','+i.lon)}`;
     const teamOptions=state.teams.map(t=>`<option value="${t.id}" ${t.id===i.team_id?'selected':''}>${escapeHtml(t.name)} (${escapeHtml(t.availability)})</option>`).join('');
     const admin=state.user?.role==='admin';
     const updates=data.updates.map(u=>`<div class="update-item"><strong>${escapeHtml(statusLabel(u.action))} <small>· ${shortDate(u.created_at)}</small></strong><p>${escapeHtml(u.message)}</p><small>${escapeHtml(u.actor_role)} action</small></div>`).join('');
-    content.innerHTML=`<div class="modal-kicker">INCIDENT RECORD / ${escapeHtml(i.id.slice(0,8).toUpperCase())}</div><h2 class="detail-title" id="detailHeading">${escapeHtml(i.title)}</h2><div class="detail-header">${severityPill(i)}<span class="status-tag">${escapeHtml(statusLabel(i.status))}</span><span class="status-tag">${escapeHtml(categories[i.category])}</span></div><p class="detail-body">${escapeHtml(i.description)}</p>
+    content.innerHTML=`<div class="modal-kicker">COMMUNITY REPORT / ${escapeHtml(i.id.slice(0,8).toUpperCase())}</div><h2 class="detail-title" id="detailHeading">${escapeHtml(i.title)}</h2><div class="detail-header">${severityPill(i)}<span class="status-tag">${escapeHtml(statusLabel(i.status))}</span><span class="status-tag">${escapeHtml(categories[i.category])}</span></div><div class="provenance-card"><span class="source-label">SOURCE / USER SUBMISSION</span><strong>Reported by a community member</strong><p>This is a user-provided observation, not an official alert. Review status reflects review within Flood Finder; it does not establish confirmation by an outside authority.</p><a href="${escapeHtml(reportLink.href)}">Open this report’s original record ↗</a><small>No external source citation is attached to this submission.</small></div><p class="detail-body">${escapeHtml(i.description)}</p>
     <div class="detail-grid"><div class="detail-cell"><small>LOCATION</small><strong>${escapeHtml(i.address||'Coordinates pinned by reporter')}</strong></div><div class="detail-cell"><small>COORDINATES</small><strong>${formatCoordinate(i.lat)}, ${formatCoordinate(i.lon)}</strong></div><div class="detail-cell"><small>FIRST REPORTED</small><strong>${shortDate(i.created_at)}</strong></div><div class="detail-cell"><small>ASSIGNED TEAM</small><strong>${escapeHtml(i.team_name||'Not assigned')}</strong></div></div>
     <div class="detail-actions"><button type="button" class="button button-outline" id="centerIncident">⌖ Show on map</button><a class="button button-outline" href="${navigate}" rel="noopener noreferrer" target="_blank">↗ Open navigation</a><button type="button" class="button button-outline" id="copyCoordinates">Copy coordinates</button></div>
     ${admin?`<div class="admin-edit"><div class="detail-section-heading">COMMAND CENTER · REVIEW & DISPATCH</div><form id="incidentAdminForm"><div class="form-row"><label>Review status<select name="status">${['reported','verified','dispatched','in_progress','resolved','rejected'].map(s=>`<option value="${s}" ${s===i.status?'selected':''}>${escapeHtml(statusLabel(s))}</option>`).join('')}</select></label><label>Priority<select name="severity">${['low','moderate','high','critical'].map(s=>`<option value="${s}" ${s===i.severity?'selected':''}>${s}</option>`).join('')}</select></label></div><label>Assign a response team<select name="team_id"><option value="">No team assigned</option>${teamOptions}</select></label><label>Operational update (public log)<textarea name="note" maxlength="500" rows="2" placeholder="Describe verification or dispatch decision. Avoid sensitive details."></textarea></label><button class="button button-primary button-full" type="submit">Save and dispatch ↗</button><div class="form-error" id="adminIncidentError" role="alert" hidden></div></form>${i.team_id?`<button id="routeTeam" type="button" class="button button-outline button-full" style="margin-top:12px">↗ Show team-to-incident route</button>`:''}</div>`:''}
@@ -588,6 +589,8 @@ async function initialize(){
   setInterval(()=>{if(document.visibilityState==='visible')fetchIncidents().catch(showConnectionError);},60000);
   setInterval(()=>{if(document.visibilityState==='visible')fetchHazards();},2*60000);
   await initialRefresh;
+  const linkedIncident=new URLSearchParams(location.search).get('incident');
+  if(linkedIncident){location.hash='#map';await openIncident(linkedIncident);}
 }
 document.addEventListener('DOMContentLoaded',initialize);
 
