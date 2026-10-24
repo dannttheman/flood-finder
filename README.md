@@ -8,6 +8,10 @@ The **Local Hazard Map** draft combines two clearly labeled sources:
 
 Weather is supporting evidence for affected areas. The main interface is the map and situation feed, not temperature cards or a general forecast dashboard. The application does not infer a flood, road closure, outage, or fire merely from a weather reading.
 
+## Development and contribution record
+
+Daniel Ladyzhensky (@dannttheman) directed the feature requirements, hazard-map scope, usability fixes and design revisions in this draft. Codex assisted with implementation, tests and documentation. The original application remains credited to its existing repository history. See the [specific contribution record](docs/CONTRIBUTIONS.md) and [documentation index](docs/INDEX.md) for evidence, source attribution and verification limits.
+
 ## Start here
 
 - [How to use the application](docs/USER_GUIDE.md)
