@@ -29,10 +29,10 @@ async function browserHarness(){
         '/api/stats':{active:2,critical:1,resolved:1,total:3},
         '/api/alerts':{alerts:[],status:'live',area:'FL',fetchedAt:'2026-10-23T12:00:00Z'}
       };
-      return {ok:true,json:async()=>responses[path]};
+      return {ok:true,json:async()=>path.startsWith('/api/geocode?')?{matches:[{address:'201 W PALMETTO PARK RD, BOCA RATON, FL 33432',lat:26.35,lon:-80.09}]}:responses[path]};
     }
   });
-  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={initialize,filteredIncidents,state};',context);
+  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={initialize,filteredIncidents,toggleReportType,ensureReportLocation,clearReportLocation,state};',context);
   await context.driver.initialize();
   return {driver:context.driver,node,requests,get events(){return events;}};
 }
@@ -55,4 +55,28 @@ test('a burst of incident and assignment events still refreshes public reports',
   assert.ok(browser.requests.includes('/api/stats'));
   assert.ok(browser.requests.includes('/api/incidents/mine'));
   browser.events.listeners.change({data:'invalid-json'});
+});
+
+test('report type chips support multiple categories and reset to all reports',async()=>{
+  const browser=await browserHarness();
+  browser.driver.toggleReportType('flood');
+  assert.deepEqual(Array.from(browser.driver.filteredIncidents(),i=>i.id),['urgent','closed']);
+  browser.driver.toggleReportType('road');
+  assert.equal(browser.driver.filteredIncidents().length,3);
+  browser.driver.toggleReportType('flood');
+  assert.deepEqual(Array.from(browser.driver.filteredIncidents(),i=>i.id),['new']);
+  browser.driver.toggleReportType('all');
+  assert.equal(browser.driver.filteredIncidents().length,3);
+});
+
+test('typing an address resolves coordinates without a map click and editing it invalidates the old pin',async()=>{
+  const browser=await browserHarness();
+  browser.node('#reportAddress').value='201 W Palmetto Park Rd, Boca Raton, FL 33432';
+  assert.equal(browser.driver.state.reportMap,null);
+  assert.equal(await browser.driver.ensureReportLocation(),true);
+  assert.equal(browser.node('#reportLat').value,'26.350000');
+  assert.equal(browser.node('#reportLon').value,'-80.090000');
+  assert.ok(browser.requests.some(path=>path.startsWith('/api/geocode?')));
+  browser.node('#reportAddress').value='A different address';browser.driver.clearReportLocation();
+  assert.equal(browser.node('#reportLat').value,'');assert.equal(browser.node('#reportLon').value,'');
 });

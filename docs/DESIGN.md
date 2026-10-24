@@ -40,3 +40,9 @@ Automated tests cover authentication and roles, report creation, dispatch and pr
 
 ## Remaining design work
 Save the above frames in Figma after account access is available. Validate on a physical phone and with representative residents and coordinators. Challenge submission eligibility, attribution, and rules have not been assessed as part of this code revision.
+
+## v2 — Address and weather workflow
+
+Reports accept a full street address and automatically resolve coordinates before submission. The map sits in an optional disclosure for adjustment and addressless locations. Ambiguous addresses show selectable results; editing an address invalidates its old coordinates.
+
+The incident panel offers multi-type quick filters synchronized with the single-type dropdown. A separate weather workspace shows independently retrieved NWS station observations and forecasts, their source times, and missing/stale states. A public address lookup or the current map area selects its location.

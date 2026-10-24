@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { lookupAddress, getLocalWeather } from './services/location-weather.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -101,6 +102,7 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
   const db = connect(databasePath);
   const rate=new Map(); const streams=new Set();
   let weatherCache={expires:0, result:null};
+  const locationCache=new Map(),weatherRequests=new Map();
   const broadcast = message => { for (const stream of streams) { try {stream.write(`event: change\ndata: ${JSON.stringify(message)}\n\n`);}catch{streams.delete(stream);} } };
   const handler=async(req,res)=>{
     Object.entries(baseHeaders).forEach(([key,val])=>res.setHeader(key,val));
@@ -333,6 +335,30 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
         const responders=db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='responder'").get().n;
         const teams=db.prepare('SELECT COUNT(*) AS n FROM teams').get().n;
         return response(res,200,{byCategory,byStatus,days,responders,teams});
+      }
+      if(req.method==='GET' && path==='/api/geocode') {
+        throttle(rate,`geocode:${ip}`,20,60000);
+        const address=field(url.searchParams.get('address'),8,250,'Address');
+        try{
+          const matches=await lookupAddress(address,weatherFetch);
+          return response(res,200,{source:'U.S. Census Bureau',matches,message:matches.length?'':'No matching U.S. street address. Include street number, city, state, and ZIP code, or use the optional map.'});
+        }catch{throw err(503,'Address lookup is unavailable. Try again or use the optional map or coordinates.');}
+      }
+      if(req.method==='GET' && path==='/api/weather') {
+        throttle(rate,`weather:${ip}`,30,60000);
+        const {lat,lon}=parseCoords({lat:url.searchParams.get('lat'),lon:url.searchParams.get('lon')});
+        const key=`${lat.toFixed(3)},${lon.toFixed(3)}`;
+        const cached=locationCache.get(key);
+        if(cached&&cached.expires>Date.now())return response(res,200,cached.result);
+        if(!weatherRequests.has(key)){
+          const pending=getLocalWeather(lat,lon,weatherFetch).then(result=>{
+            if(locationCache.size>=100)locationCache.delete(locationCache.keys().next().value);
+            locationCache.set(key,{result,expires:Date.now()+(result.status==='unavailable'?60000:10*60000)});
+            return result;
+          }).finally(()=>weatherRequests.delete(key));
+          weatherRequests.set(key,pending);
+        }
+        return response(res,200,await weatherRequests.get(key));
       }
       if(req.method==='GET' && path==='/api/alerts') {
         if(weatherCache.expires>Date.now())return response(res,200,weatherCache.result);

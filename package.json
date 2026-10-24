@@ -1,8 +1,8 @@
 {
   "name": "flood-finder",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Community incident mapping and emergency response coordination",
+  "description": "Address-based storm reporting with independent NWS weather and community response coordination",
   "type": "module",
   "engines": {
     "node": ">=22.13.0 <25"

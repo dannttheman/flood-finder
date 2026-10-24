@@ -3,15 +3,20 @@
 
 **Real community disaster reporting and response-team coordination.** Because powerful storms deserve powerful response.
 
-## Community edition (editing copy)
+## Flood Finder v2 — Weather & Address Reporting
 
-This branch, `codex/flood-finder-redesign`, is the revised copy. The original remains on `main`.
+**Start here: [Detailed User Guide](docs/USER_GUIDE.md)** · [Version index](docs/VERSIONS.md) · [API documentation](docs/API.md)
 
-Changes include a lighter responsive interface, priority sorting and filtering, Only my reports, fit-to-results mapping, clearer connection states, report flow after sign-in, and fixes for cancelled response assignments and team availability.
+This is the `flood-finder-v2-weather-addresses` editing branch. The original `main` and the earlier interface draft are preserved.
 
-See [design plan](docs/DESIGN.md) and [Render deployment proposal](docs/RENDER.md). Figma authoring and live Render deployment remain pending. `render.yaml` proposes paid resources; review charges before applying it.
+- Enter a full U.S. street address when reporting; coordinates are looked up automatically without selecting the map.
+- Select one or more report-type filters, combined with status, urgency, ownership, and search.
+- Read independent National Weather Service observations, forecasts, and official alerts; no community report is needed for weather data.
+- See source times, stale readings, missing values, and provider outages explicitly.
 
-For a side-by-side local preview, run `PORT=3001 npm start` in this copy, then open http://localhost:3001. Each copy uses its own local data directory. Never commit SQLite files, accounts, or session data.
+For this local preview, run `PORT=3002 npm start` and open http://localhost:3002. The default `npm start` still uses port 3000 unless `PORT` is set. Each local copy keeps its own `data` directory.
+
+The Render Blueprint is a deployment proposal, not a live deployment. Review paid compute and persistent storage before applying it. See [Render notes](docs/RENDER.md).
 
 ## Features
 
@@ -33,7 +38,11 @@ public/styles.css   Responsive visual system
 public/app.js       Functional browser UI and state
 public/favicon.svg  Brand mark
 scripts/admin.js    Secure administrator bootstrap
- test/api.test.js   End-to-end HTTP API integration tests
+services/location-weather.js  Government geocoding and weather adapters
+test/api.test.js   End-to-end HTTP API integration tests
+test/client.test.js  Browser logic regression tests
+test/location-weather.test.js  Provider and endpoint tests
+docs/USER_GUIDE.md Detailed instructions for every role
 ```
 ## Run locally
 
@@ -76,7 +85,7 @@ Copy `.env.example` as a reference. Set environment variables in your shell or h
 
 ## API quick reference
 
-`GET /api/health`, `GET /api/stats`, `GET /api/incidents`, `GET /api/incidents/:id`, `GET /api/alerts`, and `GET /api/stream` are public.
+`GET /api/geocode?address=...`, `GET /api/weather?lat=...&lon=...`, `GET /api/health`, `GET /api/stats`, `GET /api/incidents`, `GET /api/incidents/:id`, `GET /api/alerts`, and `GET /api/stream` are public.
 
 `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout` implement account access. Signed-in users can `POST /api/incidents` and `GET /api/incidents/mine`.
 

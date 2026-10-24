@@ -13,6 +13,9 @@ const state={user:null,incidents:[],filtered:[],teams:[],users:[],assignments:[]
 let debounceTimer,toastTimer,refreshTimer;
 let pendingReport = false;
 const pendingChanges = new Set();
+const selectedReportTypes=new Set();
+let reportAddressMatches=[],weatherAddressMatches=[],reportLookupVersion=0,weatherLookupVersion=0,weatherVersion=0;
+let weatherPoint={lat:26.3683,lon:-80.1289};
 let myReportIds = new Set();
 async function api(path,{method='GET',body}={}) {
   const opts={method,credentials:'same-origin',headers:{'Accept':'application/json'}};
@@ -113,7 +116,7 @@ async function refreshPrivate(){
   }catch(e){toast('Unable to load team data: '+e.message,'error')}
 }
 async function refreshAll(){
-  const results=await Promise.allSettled([fetchIncidents(),fetchAlerts(),refreshPrivate()]);
+  const results=await Promise.allSettled([fetchIncidents(),fetchAlerts(),refreshPrivate(),fetchLocalWeather()]);
   if(results[0].status==='rejected')showConnectionError();
   if(results.some(r=>r.status==='rejected'))toast('Some information could not refresh. Check your connection and try again.','error');
 }
@@ -130,7 +133,7 @@ function fitReports(){
 function filteredIncidents(){
   const q=$('#searchFilter').value.trim().toLowerCase(),category=$('#categoryFilter').value,status=$('#statusFilter').value,severity=$('#severityFilter').value;
   const onlyMine=$('#myReportsFilter').checked;
-  const items=state.incidents.filter(i=>(!category||i.category===category)&&(!status||i.status===status)&&(!severity||i.severity===severity)&&(!onlyMine||myReportIds.has(i.id))&&(!q||[i.title,i.description,i.address,i.id].some(v=>String(v||'').toLowerCase().includes(q))));
+  const items=state.incidents.filter(i=>(!selectedReportTypes.size||selectedReportTypes.has(i.category))&&(!category||i.category===category)&&(!status||i.status===status)&&(!severity||i.severity===severity)&&(!onlyMine||myReportIds.has(i.id))&&(!q||[i.title,i.description,i.address,i.id].some(v=>String(v||'').toLowerCase().includes(q))));
   const rank={critical:0,high:1,moderate:2,low:3};
   return items.sort((a,b)=>{
     if($('#sortFilter').value==='priority'){
@@ -140,6 +143,81 @@ function filteredIncidents(){
     }
     return new Date(b.created_at)-new Date(a.created_at);
   });
+}
+function toggleReportType(type){
+  if(type==='all')selectedReportTypes.clear();
+  else if(selectedReportTypes.has(type))selectedReportTypes.delete(type);
+  else selectedReportTypes.add(type);
+  $('#categoryFilter').value=selectedReportTypes.size===1?[...selectedReportTypes][0]:'';
+  updateTypeChips();renderIncidents();
+}
+function updateTypeChips(){
+  $$('[data-report-type]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.reportType==='all'?selectedReportTypes.size===0:selectedReportTypes.has(button.dataset.reportType))));
+}
+const weatherNumber=(value,suffix='')=>typeof value==='number'&&Number.isFinite(value)?`${Math.round(value*10)/10}${suffix}`:'Not reported';
+async function fetchLocalWeather(){
+  const version=++weatherVersion;
+  $('#weatherContent').innerHTML='<p class="weather-notice">Loading National Weather Service data…</p>';
+  try{
+    const data=await api(`/api/weather?lat=${weatherPoint.lat}&lon=${weatherPoint.lon}`);
+    if(version!==weatherVersion)return;
+    const observation=data.observation;
+    const badge=data.status==='live'?'Observation + forecast':data.status==='partial'?'Partial / older data':'Weather unavailable';
+    const observed=observation?`Station ${escapeHtml(observation.station)} · observed ${escapeHtml(shortDate(observation.observedAt))}${observation.stale?' · OLDER THAN 2 HOURS':''}`:'Nearby station observation unavailable';
+    const metrics=observation?`<div class="weather-metrics"><div><small>TEMPERATURE</small><strong>${weatherNumber(observation.temperatureF,'°F')}</strong></div><div><small>WIND</small><strong>${weatherNumber(observation.windMph,' mph')}</strong></div><div><small>RELATIVE HUMIDITY</small><strong>${weatherNumber(observation.humidityPercent,'%')}</strong></div><div><small>RAIN · LAST HOUR</small><strong>${weatherNumber(observation.rainLastHourMm,' mm')}</strong></div></div>`:'';
+    const forecast=(data.forecast||[]).map(period=>`<article class="forecast-card"><small>${escapeHtml(period.name)}</small><strong>${weatherNumber(period.temperature,'°'+escapeHtml(period.temperatureUnit))}</strong><p>${escapeHtml(period.shortForecast)}</p><span>Rain chance: ${weatherNumber(period.precipitationProbability,'%')}</span><span>Wind: ${escapeHtml(period.windSpeed)} ${escapeHtml(period.windDirection)}</span></article>`).join('');
+    $('#weatherContent').innerHTML=`<div class="weather-source"><div><h3>${escapeHtml(data.location?.label||'Selected map area')}</h3><p>${escapeHtml(observation?.description||'Official local weather')} · ${escapeHtml(weatherPoint.lat.toFixed(3))}, ${escapeHtml(weatherPoint.lon.toFixed(3))}</p></div><span class="status-tag">${badge}</span></div><p class="weather-timestamp">${observed} · fetched ${escapeHtml(shortDate(data.fetchedAt))}</p>${data.message?`<p class="weather-notice">${escapeHtml(data.message)}</p>`:''}${metrics}${forecast?`<h3 class="forecast-heading">Upcoming forecast</h3><div class="forecast-grid">${forecast}</div>`:''}<p class="weather-footnote">Source: <a href="https://www.weather.gov/" target="_blank" rel="noopener noreferrer">National Weather Service ↗</a>. Station conditions may differ from the incident location. Missing readings are not zero. Weather does not verify flood depth or road safety.</p>`;
+  }catch{
+    if(version===weatherVersion)$('#weatherContent').innerHTML='<p class="weather-notice">Weather could not load. Check your connection and use Refresh to try again. No weather readings are being estimated.</p>';
+  }
+}
+function showAddressMatches(container,matches,kind){
+  $(container).innerHTML=matches.length?matches.map((match,index)=>`<button type="button" data-address-kind="${kind}" data-address-index="${index}">${escapeHtml(match.address)} <span>Use this address ↗</span></button>`).join(''):'<p class="weather-notice">No matching U.S. street address. Include the street number, city, state, and ZIP. You can also use the optional map.</p>';
+}
+function clearReportLocation(){
+  reportLookupVersion++;reportAddressMatches=[];$('#reportAddressResults').innerHTML='';
+  $('#reportLat').value='';$('#reportLon').value='';
+  if(state.reportMarker&&state.reportMap){state.reportMap.removeLayer(state.reportMarker);state.reportMarker=null;}
+  $('#reportLocationStatus').textContent='Address changed. Its location will be looked up before publishing.';
+}
+function useReportAddress(match){
+  $('#reportAddress').value=match.address;
+  setReportPin(match.lat,match.lon,'address');
+  state.reportMap?.setView([match.lat,match.lon],16);
+  $('#reportAddressResults').innerHTML='';
+}
+async function findReportAddress(){
+  const address=$('#reportAddress').value.trim();
+  if(address.length<8)throw Error('Enter a full U.S. street address, or choose a location using the optional map.');
+  const version=++reportLookupVersion;
+  $('#reportLocationStatus').textContent='Looking up the address…';
+  const result=await api('/api/geocode?address='+encodeURIComponent(address));
+  if(version!==reportLookupVersion)throw Error('The address changed during lookup. Find the new address before publishing.');
+  reportAddressMatches=result.matches;
+  if(result.matches.length===1){useReportAddress(result.matches[0]);return true;}
+  showAddressMatches('#reportAddressResults',result.matches,'report');
+  $('#reportLocationStatus').textContent=result.matches.length?'Choose a matching address below.':'Address not found. Try a more complete address or use the optional map.';
+  return false;
+}
+async function ensureReportLocation(){
+  if($('#reportLat').value!==''&&$('#reportLon').value!=='')return true;
+  return findReportAddress();
+}
+async function findWeatherAddress(e){
+  e.preventDefault();const button=$('#weatherAddressSearch'),version=++weatherLookupVersion;
+  loadingButton(button,true);
+  try{
+    const result=await api('/api/geocode?address='+encodeURIComponent($('#weatherAddress').value.trim()));
+    if(version!==weatherLookupVersion)return;
+    weatherAddressMatches=result.matches;
+    if(result.matches.length===1)useWeatherAddress(result.matches[0]);
+    else showAddressMatches('#weatherAddressResults',result.matches,'weather');
+  }catch(error){$('#weatherAddressResults').textContent=error.message;}
+  finally{loadingButton(button,false,'Find weather');}
+}
+function useWeatherAddress(match){
+  weatherPoint={lat:match.lat,lon:match.lon};$('#weatherAddress').value=match.address;$('#weatherAddressResults').innerHTML='';
+  state.map?.setView([match.lat,match.lon],13);fetchLocalWeather();
 }
 function severityPill(i){return `<span class="pill severity-${escapeHtml(i.severity)}">${escapeHtml(i.severity)}</span>`;}
 function renderIncidents(){
@@ -187,7 +265,8 @@ function renderAlerts(){
     }else if(state.map.hasLayer(state.weatherLayer))state.map.removeLayer(state.weatherLayer);
   }
 }
-function setReportPin(lat,lon){
+function setReportPin(lat,lon,source='map'){
+  $('#reportLocationStatus').textContent=source==='address'?'Address found. Location is ready; map selection is optional.':'Location set using the map or coordinates.';
   $('#reportLat').value=Number(lat).toFixed(6);$('#reportLon').value=Number(lon).toFixed(6);
   if(state.reportMap){
     if(state.reportMarker)state.reportMarker.setLatLng([lat,lon]);
@@ -198,11 +277,11 @@ function setReportPin(lat,lon){
 }
 function openReport(){
   requireLogin(()=>{
-    formError('#reportError','');$('#reportForm').reset();$('#reportLat').value='';$('#reportLon').value='';
+    formError('#reportError','');$('#reportForm').reset();reportLookupVersion++;reportAddressMatches=[];$('#reportAddressResults').innerHTML='';$('#reportLocationStatus').textContent='Enter an address to locate this report automatically.';$('#reportMapOptions').open=false;$('#reportLat').value='';$('#reportLon').value='';
     if(state.reportMarker&&state.reportMap){state.reportMap.removeLayer(state.reportMarker);state.reportMarker=null;}
     openDialog('#reportDialog');
     setTimeout(()=>{
-      if(typeof L==='undefined'){formError('#reportError','Map failed to load. You can enter latitude and longitude directly.');return;}
+      if(typeof L==='undefined'){formError('#reportError','Map preview unavailable. Address lookup and coordinate entry still work.');return;}
       if(!state.reportMap){
         const center=state.map?state.map.getCenter():{lat:26.3683,lng:-80.1289};
         state.reportMap=L.map('reportMap').setView([center.lat,center.lng],12);
@@ -216,9 +295,11 @@ function openReport(){
 }
 async function submitReport(e){
   e.preventDefault();const form=e.currentTarget,button=$('#reportSubmit');formError('#reportError','');
-  const b=Object.fromEntries(new FormData(form).entries());b.lat=Number(b.lat);b.lon=Number(b.lon);
   loadingButton(button,true);
   try{
+    if(!await ensureReportLocation())return;
+    const b=Object.fromEntries(new FormData(form).entries());b.lat=Number(b.lat);b.lon=Number(b.lon);
+    if(!Number.isFinite(b.lat)||Math.abs(b.lat)>90||!Number.isFinite(b.lon)||Math.abs(b.lon)>180)throw Error('Choose a valid location.');
     const result=await api('/api/incidents',{method:'POST',body:b});closeDialog('#reportDialog');
     await fetchIncidents();location.hash='#map';
     setTimeout(()=>{state.map?.setView([result.incident.lat,result.incident.lon],14);openIncident(result.incident.id);},120);
@@ -356,6 +437,14 @@ async function initialize(){
   $('#authForm').addEventListener('submit',submitAuth);
   $$('#heroReport,#mapReport').forEach(b=>b.addEventListener('click',openReport));
   $('#reportForm').addEventListener('submit',submitReport);
+  $('#reportAddress').addEventListener('input',clearReportLocation);
+  $('#findReportAddress').addEventListener('click',async()=>{const button=$('#findReportAddress');loadingButton(button,true);formError('#reportError','');try{await findReportAddress();}catch(error){formError('#reportError',error.message);}finally{loadingButton(button,false,'Find address');}});
+  $('#reportMapOptions').addEventListener('toggle',()=>{if($('#reportMapOptions').open)state.reportMap?.invalidateSize();});
+  $('#weatherLocationForm').addEventListener('submit',findWeatherAddress);
+  $('#weatherAddress').addEventListener('input',()=>{weatherLookupVersion++;weatherAddressMatches=[];$('#weatherAddressResults').innerHTML='';});
+  $('#weatherMapArea').addEventListener('click',()=>{const point=state.map?.getCenter();if(point){weatherPoint={lat:point.lat,lon:point.lng};$('#weatherAddress').value='';fetchLocalWeather();}});
+  $('#categoryFilter').addEventListener('change',()=>{selectedReportTypes.clear();if($('#categoryFilter').value)selectedReportTypes.add($('#categoryFilter').value);updateTypeChips();renderIncidents();});
+
   $('#useLocation').addEventListener('click',()=>{
     if(!navigator.geolocation){formError('#reportError','Geolocation not supported');return;}
     navigator.geolocation.getCurrentPosition(p=>{
@@ -369,9 +458,9 @@ async function initialize(){
   $('#teamForm').addEventListener('submit',submitTeam);
   $$('#addTeam,#addTeamSecondary').forEach(b=>b.addEventListener('click',()=>openTeam()));
   $$('#refreshButton,#adminRefresh,#tasksRefresh').forEach(b=>b.addEventListener('click',refreshAll));
-  $$('#categoryFilter,#statusFilter,#severityFilter,#sortFilter,#myReportsFilter').forEach(el=>el.addEventListener('change',renderIncidents));
+  $$('#statusFilter,#severityFilter,#sortFilter,#myReportsFilter').forEach(el=>el.addEventListener('change',renderIncidents));
   $('#searchFilter').addEventListener('input',()=>{clearTimeout(debounceTimer);debounceTimer=setTimeout(renderIncidents,170)});
-  $('#clearFilters').addEventListener('click',()=>{$('#searchFilter').value='';$('#categoryFilter').value='';$('#statusFilter').value='';$('#severityFilter').value='';$('#sortFilter').value='priority';$('#myReportsFilter').checked=false;renderIncidents()});
+  $('#clearFilters').addEventListener('click',()=>{$('#searchFilter').value='';$('#categoryFilter').value='';selectedReportTypes.clear();updateTypeChips();$('#statusFilter').value='';$('#severityFilter').value='';$('#sortFilter').value='priority';$('#myReportsFilter').checked=false;renderIncidents()});
   $('#alertsToggle').addEventListener('change',renderAlerts);
   $('#recenterButton').addEventListener('click',fitReports);
   $('#mobileMenu').addEventListener('click',()=>{const open=$('.nav-links').classList.toggle('open');$('#mobileMenu').setAttribute('aria-expanded',String(open));});
@@ -383,6 +472,8 @@ async function initialize(){
   }));
   $('#authDialog').addEventListener('close',()=>{if(!state.user)pendingReport=false;});
   document.body.addEventListener('click',e=>{
+    const type=e.target.closest('[data-report-type]');if(type){toggleReportType(type.dataset.reportType);return;}
+    const address=e.target.closest('[data-address-kind]');if(address){const matches=address.dataset.addressKind==='report'?reportAddressMatches:weatherAddressMatches,match=matches[Number(address.dataset.addressIndex)];if(match){if(address.dataset.addressKind==='report')useReportAddress(match);else useWeatherAddress(match);}return;}
     const op=e.target.closest('[data-open-id]');if(op){openIncident(op.dataset.openId);return;}
     const edit=e.target.closest('[data-edit-team]');if(edit){openTeam(edit.dataset.editTeam);return;}
     const prog=e.target.closest('[data-progress-id]');if(prog){updateAssignment(prog.dataset.progressId,prog.dataset.progressStatus);return;}
@@ -411,7 +502,7 @@ async function initialize(){
     });
   }catch(e){console.warn('Live events unavailable',e)}
   setInterval(()=>{if(document.visibilityState==='visible')fetchIncidents().catch(showConnectionError);},60000);
-  setInterval(()=>{if(document.visibilityState==='visible')fetchAlerts().catch(()=>{});},10*60000);
+  setInterval(()=>{if(document.visibilityState==='visible'){fetchAlerts().catch(()=>{});fetchLocalWeather();}},10*60000);
 }
 document.addEventListener('DOMContentLoaded',initialize);
 
