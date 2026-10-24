@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { lookupAddress, getLocalWeather } from './services/location-weather.js';
+import { createHazardService } from './services/hazards.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -103,6 +104,7 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
   const rate=new Map(); const streams=new Set();
   let weatherCache={expires:0, result:null};
   const locationCache=new Map(),weatherRequests=new Map();
+  const hazardCache=new Map(),hazardRequests=new Map(),getHazards=createHazardService(weatherFetch);
   const broadcast = message => { for (const stream of streams) { try {stream.write(`event: change\ndata: ${JSON.stringify(message)}\n\n`);}catch{streams.delete(stream);} } };
   const handler=async(req,res)=>{
     Object.entries(baseHeaders).forEach(([key,val])=>res.setHeader(key,val));
@@ -343,6 +345,20 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
           const matches=await lookupAddress(address,weatherFetch);
           return response(res,200,{source:'U.S. Census Bureau',matches,message:matches.length?'':'No matching U.S. street address. Include street number, city, state, and ZIP code, or use the optional map.'});
         }catch{throw err(503,'Address lookup is unavailable. Try again or use the optional map or coordinates.');}
+      }
+      if(req.method==='GET' && path==='/api/hazards') {
+        throttle(rate,`hazards:${ip}`,30,60000);
+        const {lat,lon}=parseCoords({lat:url.searchParams.get('lat'),lon:url.searchParams.get('lon')});
+        const radiusKm=url.searchParams.has('radius')?number(url.searchParams.get('radius')):25;
+        if(!Number.isFinite(radiusKm)||radiusKm<1||radiusKm>100)throw err(400,'Search radius must be between 1 and 100 km');
+        const key=`${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm}`;
+        const cached=hazardCache.get(key);
+        if(cached&&cached.expires>Date.now())return response(res,200,cached.result);
+        if(!hazardRequests.has(key))hazardRequests.set(key,getHazards(lat,lon,radiusKm).then(result=>{
+          if(hazardCache.size>=100)hazardCache.delete(hazardCache.keys().next().value);
+          hazardCache.set(key,{result,expires:Date.now()+(result.status==='unavailable'?30000:120000)});return result;
+        }).finally(()=>hazardRequests.delete(key)));
+        return response(res,200,await hazardRequests.get(key));
       }
       if(req.method==='GET' && path==='/api/weather') {
         throttle(rate,`weather:${ip}`,30,60000);

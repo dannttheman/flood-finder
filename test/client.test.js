@@ -11,9 +11,9 @@ async function browserHarness(){
   };
   node('#sortFilter').value='priority';
   const incidents=[
-    {id:'new',title:'New minor report',description:'New report',category:'road',severity:'low',status:'reported',created_at:'2026-10-23T12:00:00Z'},
-    {id:'urgent',title:'Older critical report',description:'Critical report',category:'flood',severity:'critical',status:'reported',created_at:'2026-10-22T12:00:00Z'},
-    {id:'closed',title:'Resolved critical report',description:'Closed report',category:'flood',severity:'critical',status:'resolved',created_at:'2026-10-23T13:00:00Z'}
+    {id:'new',title:'New minor report',description:'New report',category:'road',severity:'low',status:'reported',lat:26.35,lon:-80.13,created_at:'2026-10-23T12:00:00Z'},
+    {id:'urgent',title:'Older critical report',description:'Critical report',category:'flood',severity:'critical',status:'reported',lat:26.35,lon:-80.13,created_at:'2026-10-22T12:00:00Z'},
+    {id:'closed',title:'Resolved critical report',description:'Closed report',category:'flood',severity:'critical',status:'resolved',lat:26.35,lon:-80.13,created_at:'2026-10-23T13:00:00Z'}
   ];
   let events;
   const context=vm.createContext({
@@ -32,7 +32,7 @@ async function browserHarness(){
       return {ok:true,json:async()=>path.startsWith('/api/geocode?')?{matches:[{address:'201 W PALMETTO PARK RD, BOCA RATON, FL 33432',lat:26.35,lon:-80.09}]}:responses[path]};
     }
   });
-  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={initialize,filteredIncidents,toggleReportType,ensureReportLocation,clearReportLocation,state};',context);
+  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={initialize,filteredIncidents,toggleReportType,ensureReportLocation,clearReportLocation,filteredHazards,setSourceFilter,state};',context);
   await context.driver.initialize();
   return {driver:context.driver,node,requests,get events(){return events;}};
 }
@@ -79,4 +79,14 @@ test('typing an address resolves coordinates without a map click and editing it 
   assert.ok(browser.requests.some(path=>path.startsWith('/api/geocode?')));
   browser.node('#reportAddress').value='A different address';browser.driver.clearReportLocation();
   assert.equal(browser.node('#reportLat').value,'');assert.equal(browser.node('#reportLon').value,'');
+});
+
+test('source filters keep official areas separate from community reports and reject distant reports',async()=>{
+  const browser=await browserHarness();
+  browser.driver.state.hazards=[{id:'official-flood',event:'Flood Warning',category:'flood',area:'Local area'}];
+  browser.driver.state.incidents.push({id:'far-away',category:'road',lat:35,lon:-85,severity:'critical',status:'reported',created_at:new Date().toISOString()});
+  assert.equal(browser.driver.filteredIncidents().length,3);
+  browser.driver.setSourceFilter('official');assert.equal(browser.driver.state.filtered.length,0);assert.equal(browser.driver.filteredHazards().length,1);
+  browser.driver.setSourceFilter('community');assert.equal(browser.driver.filteredHazards().length,0);assert.equal(browser.driver.state.filtered.length,3);
+  browser.driver.setSourceFilter('all');browser.node('#hazardTypeFilter').value='winter';assert.equal(browser.driver.filteredHazards().length,0);
 });

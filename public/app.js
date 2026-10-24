@@ -9,13 +9,14 @@ const statusLabel = s => ({in_progress:'In progress'}[s] || String(s||'').replac
 const escapeHtml = x => String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const shortDate = d => d ? new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Unknown';
 const formatCoordinate = n => Number(n).toFixed(5);
-const state={user:null,incidents:[],filtered:[],teams:[],users:[],assignments:[],alerts:[],alertsStatus:'loading',weatherMeta:null,metrics:null,stats:null,map:null,reportMap:null,reportMarker:null,markers:null,weatherLayer:null,routeLayer:null,routeMarkers:null,selected:null,lastRefresh:null,stream:null,authMode:'login',mapReady:false};
+const state={hazards:[],hazardMeta:null,visibleHazards:[],searchCircle:null,user:null,incidents:[],filtered:[],teams:[],users:[],assignments:[],metrics:null,stats:null,map:null,reportMap:null,reportMarker:null,markers:null,weatherLayer:null,routeLayer:null,routeMarkers:null,selected:null,lastRefresh:null,stream:null,authMode:'login',mapReady:false};
 let debounceTimer,toastTimer,refreshTimer;
 let pendingReport = false;
 const pendingChanges = new Set();
 const selectedReportTypes=new Set();
-let reportAddressMatches=[],weatherAddressMatches=[],reportLookupVersion=0,weatherLookupVersion=0,weatherVersion=0;
-let weatherPoint={lat:26.3683,lon:-80.1289};
+let reportAddressMatches=[],areaAddressMatches=[],reportLookupVersion=0,areaLookupVersion=0,hazardVersion=0;
+let searchArea={lat:26.3683,lon:-80.1289};
+let sourceFilter='all';
 let myReportIds = new Set();
 async function api(path,{method='GET',body}={}) {
   const opts={method,credentials:'same-origin',headers:{'Accept':'application/json'}};
@@ -72,7 +73,7 @@ function updateAuthUI(){
   if(!u){$('#myReportsFilter').checked=false;myReportIds.clear();renderIncidents();}
 }
 function route(){
-  let target=location.hash.replace(/^#/,'')||'home';
+  let target=location.hash.replace(/^#/,'')||'map';
   if(!allowedViews.includes(target))target='home';
   if(target==='admin'&&state.user?.role!=='admin')target='map';
   if(target==='tasks'&&!['responder','admin'].includes(state.user?.role))target='map';
@@ -83,7 +84,7 @@ function route(){
   $$('[data-nav]').forEach(el=>{if(el.dataset.nav===target)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
   if(target==='map'){
     initializeMap();setTimeout(()=>{state.map?.invalidateSize();},90);
-    renderIncidents();renderAlerts();
+    renderIncidents();renderHazards();
   }
   if(target==='admin')renderAdmin();
   if(target==='tasks')renderAssignments();
@@ -101,9 +102,6 @@ async function fetchIncidents(){
   $('#lastUpdated').textContent='Updated '+state.lastRefresh.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
   statsRender();renderIncidents();if(!$('#adminView').hidden)renderAdmin();
 }
-async function fetchAlerts(){
-  const data=await api('/api/alerts');state.alerts=data.alerts;state.alertsStatus=data.status;state.weatherMeta=data;renderAlerts();
-}
 async function refreshPrivate(){
   if(!state.user)return;
   try{
@@ -116,7 +114,7 @@ async function refreshPrivate(){
   }catch(e){toast('Unable to load team data: '+e.message,'error')}
 }
 async function refreshAll(){
-  const results=await Promise.allSettled([fetchIncidents(),fetchAlerts(),refreshPrivate(),fetchLocalWeather()]);
+  const results=await Promise.allSettled([fetchIncidents(),refreshPrivate(),fetchHazards()]);
   if(results[0].status==='rejected')showConnectionError();
   if(results.some(r=>r.status==='rejected'))toast('Some information could not refresh. Check your connection and try again.','error');
 }
@@ -126,14 +124,16 @@ function showConnectionError(){
 }
 function fitReports(){
   if(!state.map)return;
-  if(!state.filtered.length){state.map.setView([26.3683,-80.1289],9);return;}
-  state.map.fitBounds(L.latLngBounds(state.filtered.map(i=>[i.lat,i.lon])),{padding:[55,85],maxZoom:14});
+  const bounds=L.latLngBounds(state.filtered.map(report=>[report.lat,report.lon]));
+  for(const hazard of state.visibleHazards)if(hazard.geometry){const area=L.geoJSON(hazard.geometry).getBounds();if(area.isValid())bounds.extend(area);}
+  if(bounds.isValid())state.map.fitBounds(bounds,{padding:[45,75],maxZoom:14});
+  else if(state.searchCircle)state.map.fitBounds(state.searchCircle.getBounds(),{padding:[30,60]});
 }
 
 function filteredIncidents(){
   const q=$('#searchFilter').value.trim().toLowerCase(),category=$('#categoryFilter').value,status=$('#statusFilter').value,severity=$('#severityFilter').value;
   const onlyMine=$('#myReportsFilter').checked;
-  const items=state.incidents.filter(i=>(!selectedReportTypes.size||selectedReportTypes.has(i.category))&&(!category||i.category===category)&&(!status||i.status===status)&&(!severity||i.severity===severity)&&(!onlyMine||myReportIds.has(i.id))&&(!q||[i.title,i.description,i.address,i.id].some(v=>String(v||'').toLowerCase().includes(q))));
+  const items=state.incidents.filter(i=>distanceKm(i.lat,i.lon)<=searchRadius()&&(!selectedReportTypes.size||selectedReportTypes.has(i.category))&&(!category||i.category===category)&&(!status||i.status===status)&&(!severity||i.severity===severity)&&(!onlyMine||myReportIds.has(i.id))&&(!q||[i.title,i.description,i.address,i.id].some(v=>String(v||'').toLowerCase().includes(q))));
   const rank={critical:0,high:1,moderate:2,low:3};
   return items.sort((a,b)=>{
     if($('#sortFilter').value==='priority'){
@@ -154,22 +154,59 @@ function toggleReportType(type){
 function updateTypeChips(){
   $$('[data-report-type]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.reportType==='all'?selectedReportTypes.size===0:selectedReportTypes.has(button.dataset.reportType))));
 }
-const weatherNumber=(value,suffix='')=>typeof value==='number'&&Number.isFinite(value)?`${Math.round(value*10)/10}${suffix}`:'Not reported';
-async function fetchLocalWeather(){
-  const version=++weatherVersion;
-  $('#weatherContent').innerHTML='<p class="weather-notice">Loading National Weather Service data…</p>';
+function distanceKm(lat,lon){
+  if(!Number.isFinite(lat)||!Number.isFinite(lon))return Infinity;
+  const rad=Math.PI/180,dlat=(lat-searchArea.lat)*rad,dlon=(lon-searchArea.lon)*rad;
+  const a=Math.sin(dlat/2)**2+Math.cos(searchArea.lat*rad)*Math.cos(lat*rad)*Math.sin(dlon/2)**2;
+  return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(Math.max(0,1-a)));
+}
+const searchRadius=()=>Number($('#radiusFilter').value)||25;
+function setSourceFilter(value){
+  if(!['all','official','community'].includes(value))return;
+  sourceFilter=value;$$('[data-source-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sourceFilter===value)));renderIncidents();
+}
+function filteredHazards(){
+  const type=$('#hazardTypeFilter').value,q=$('#searchFilter').value.trim().toLowerCase();
+  return sourceFilter==='community'?[]:state.hazards.filter(h=>(!type||h.category===type)&&(!q||[h.event,h.headline,h.area].some(value=>String(value||'').toLowerCase().includes(q))));
+}
+async function fetchHazards(){
+  const version=++hazardVersion;
+  $('#hazardStatus').textContent='Checking official hazards…';
+  if(state.hazardMeta&&(state.hazardMeta.location?.lat!==searchArea.lat||state.hazardMeta.location?.lon!==searchArea.lon||state.hazardMeta.radiusKm!==searchRadius())){state.hazards=[];renderIncidents();}
   try{
-    const data=await api(`/api/weather?lat=${weatherPoint.lat}&lon=${weatherPoint.lon}`);
-    if(version!==weatherVersion)return;
-    const observation=data.observation;
-    const badge=data.status==='live'?'Observation + forecast':data.status==='partial'?'Partial / older data':'Weather unavailable';
-    const observed=observation?`Station ${escapeHtml(observation.station)} · observed ${escapeHtml(shortDate(observation.observedAt))}${observation.stale?' · OLDER THAN 2 HOURS':''}`:'Nearby station observation unavailable';
-    const metrics=observation?`<div class="weather-metrics"><div><small>TEMPERATURE</small><strong>${weatherNumber(observation.temperatureF,'°F')}</strong></div><div><small>WIND</small><strong>${weatherNumber(observation.windMph,' mph')}</strong></div><div><small>RELATIVE HUMIDITY</small><strong>${weatherNumber(observation.humidityPercent,'%')}</strong></div><div><small>RAIN · LAST HOUR</small><strong>${weatherNumber(observation.rainLastHourMm,' mm')}</strong></div></div>`:'';
-    const forecast=(data.forecast||[]).map(period=>`<article class="forecast-card"><small>${escapeHtml(period.name)}</small><strong>${weatherNumber(period.temperature,'°'+escapeHtml(period.temperatureUnit))}</strong><p>${escapeHtml(period.shortForecast)}</p><span>Rain chance: ${weatherNumber(period.precipitationProbability,'%')}</span><span>Wind: ${escapeHtml(period.windSpeed)} ${escapeHtml(period.windDirection)}</span></article>`).join('');
-    $('#weatherContent').innerHTML=`<div class="weather-source"><div><h3>${escapeHtml(data.location?.label||'Selected map area')}</h3><p>${escapeHtml(observation?.description||'Official local weather')} · ${escapeHtml(weatherPoint.lat.toFixed(3))}, ${escapeHtml(weatherPoint.lon.toFixed(3))}</p></div><span class="status-tag">${badge}</span></div><p class="weather-timestamp">${observed} · fetched ${escapeHtml(shortDate(data.fetchedAt))}</p>${data.message?`<p class="weather-notice">${escapeHtml(data.message)}</p>`:''}${metrics}${forecast?`<h3 class="forecast-heading">Upcoming forecast</h3><div class="forecast-grid">${forecast}</div>`:''}<p class="weather-footnote">Source: <a href="https://www.weather.gov/" target="_blank" rel="noopener noreferrer">National Weather Service ↗</a>. Station conditions may differ from the incident location. Missing readings are not zero. Weather does not verify flood depth or road safety.</p>`;
+    const data=await api(`/api/hazards?lat=${searchArea.lat}&lon=${searchArea.lon}&radius=${searchRadius()}`);
+    if(version!==hazardVersion)return;
+    state.hazardMeta=data;state.hazards=data.hazards||[];
+    $('#areaName').textContent=data.location?.label||'Selected area';
+    $('#hazardStatus').textContent=(data.status==='live'?'Official feed updated ':data.status==='partial'?'Partial official coverage · ':'Official feed unavailable · ')+shortDate(data.fetchedAt);
+    $('#hazardNotice').hidden=!data.message;$('#hazardNotice').textContent=data.message||'';
+    renderHazards();
   }catch{
-    if(version===weatherVersion)$('#weatherContent').innerHTML='<p class="weather-notice">Weather could not load. Check your connection and use Refresh to try again. No weather readings are being estimated.</p>';
+    if(version!==hazardVersion)return;
+    state.hazards=[];state.hazardMeta={status:'unavailable'};
+    $('#hazardStatus').textContent='Official feed unavailable';$('#hazardNotice').hidden=false;
+    $('#hazardNotice').textContent='Official hazards could not refresh. Community reports remain available. Try Refresh or check weather.gov.';
+    renderHazards();
   }
+}
+function renderHazards(){renderIncidents();}
+function renderHazardAreas(){
+  if(!state.map||!state.weatherLayer)return;
+  state.weatherLayer.clearLayers();
+  if($('#alertsToggle').checked&&sourceFilter!=='community'){
+    for(const hazard of state.visibleHazards)if(hazard.geometry){
+      try{state.weatherLayer.addData({type:'Feature',properties:{id:hazard.id,event:hazard.event,severity:hazard.severity,geometrySource:hazard.geometrySource},geometry:hazard.geometry});}catch{console.warn('Skipped invalid official hazard boundary');}
+    }
+    state.weatherLayer.addTo(state.map);
+  }else if(state.map.hasLayer(state.weatherLayer))state.map.removeLayer(state.weatherLayer);
+  if(state.searchCircle)state.map.removeLayer(state.searchCircle);
+  state.searchCircle=L.circle([searchArea.lat,searchArea.lon],{radius:searchRadius()*1000,color:'#536f85',weight:1,dashArray:'5 6',fill:false,interactive:false}).addTo(state.map);
+}
+function openHazard(ident){
+  const hazard=state.hazards.find(item=>item.id===ident);if(!hazard)return;
+  $('#hazardDetailContent').innerHTML=`<p class="source-label official-source">OFFICIAL · NATIONAL WEATHER SERVICE</p><h2 id="hazardHeading">${escapeHtml(hazard.event)}</h2><p><span class="status-tag">${escapeHtml(hazard.severity)} · ${escapeHtml(hazard.certainty)}</span></p><p class="detail-body">${escapeHtml(hazard.headline)}</p><p class="hazard-location-note">${escapeHtml(hazard.locationNote)}</p><div class="detail-grid"><div class="detail-cell"><small>AFFECTED AREA</small><strong>${escapeHtml(hazard.area)}</strong></div><div class="detail-cell"><small>EXPIRES</small><strong>${escapeHtml(shortDate(hazard.expires))}</strong></div></div><h3>Official description</h3><p class="detail-body">${escapeHtml(hazard.description||'No additional description supplied.')}</p><h3>Instructions from the issuer</h3><p class="detail-body">${escapeHtml(hazard.instruction||'No additional instructions supplied. Check the official source.')}</p><a class="button button-outline" href="${escapeHtml(hazard.url)}" target="_blank" rel="noopener noreferrer">Open official alert</a>${hazard.geometry?'<button class="button button-outline" id="showHazardArea">Show affected area</button>':''}`;
+  if(hazard.geometry)$('#showHazardArea').addEventListener('click',()=>{closeDialog('#hazardDialog');location.hash='#map';if(state.map){const bounds=L.geoJSON(hazard.geometry).getBounds();if(bounds.isValid())state.map.fitBounds(bounds,{padding:[40,50],maxZoom:12});}});
+  openDialog('#hazardDialog');
 }
 function showAddressMatches(container,matches,kind){
   $(container).innerHTML=matches.length?matches.map((match,index)=>`<button type="button" data-address-kind="${kind}" data-address-index="${index}">${escapeHtml(match.address)} <span>Use this address ↗</span></button>`).join(''):'<p class="weather-notice">No matching U.S. street address. Include the street number, city, state, and ZIP. You can also use the optional map.</p>';
@@ -203,36 +240,37 @@ async function ensureReportLocation(){
   if($('#reportLat').value!==''&&$('#reportLon').value!=='')return true;
   return findReportAddress();
 }
-async function findWeatherAddress(e){
-  e.preventDefault();const button=$('#weatherAddressSearch'),version=++weatherLookupVersion;
+async function findAreaAddress(e){
+  e.preventDefault();const button=$('#areaSearchButton'),version=++areaLookupVersion;
   loadingButton(button,true);
   try{
-    const result=await api('/api/geocode?address='+encodeURIComponent($('#weatherAddress').value.trim()));
-    if(version!==weatherLookupVersion)return;
-    weatherAddressMatches=result.matches;
-    if(result.matches.length===1)useWeatherAddress(result.matches[0]);
-    else showAddressMatches('#weatherAddressResults',result.matches,'weather');
-  }catch(error){$('#weatherAddressResults').textContent=error.message;}
-  finally{loadingButton(button,false,'Find weather');}
+    const result=await api('/api/geocode?address='+encodeURIComponent($('#areaAddress').value.trim()));
+    if(version!==areaLookupVersion)return;
+    areaAddressMatches=result.matches;
+    if(result.matches.length===1)useAreaAddress(result.matches[0]);
+    else showAddressMatches('#areaAddressResults',result.matches,'area');
+  }catch(error){$('#areaAddressResults').textContent=error.message;}
+  finally{loadingButton(button,false,'Find area');}
 }
-function useWeatherAddress(match){
-  weatherPoint={lat:match.lat,lon:match.lon};$('#weatherAddress').value=match.address;$('#weatherAddressResults').innerHTML='';
-  state.map?.setView([match.lat,match.lon],13);fetchLocalWeather();
+function useAreaAddress(match){
+  searchArea={lat:match.lat,lon:match.lon};$('#areaAddress').value=match.address;$('#areaAddressResults').innerHTML='';
+  state.map?.setView([match.lat,match.lon],13);fetchHazards();
 }
 function severityPill(i){return `<span class="pill severity-${escapeHtml(i.severity)}">${escapeHtml(i.severity)}</span>`;}
 function renderIncidents(){
-  state.filtered=filteredIncidents();$('#feedCount').textContent=state.filtered.length;
-  const feed=$('#incidentFeed');
-  feed.innerHTML=state.filtered.length?state.filtered.map(i=>`<button class="incident-item" data-open-id="${i.id}" type="button"><div class="incident-item-top">${severityPill(i)}<span class="status-tag">${escapeHtml(statusLabel(i.status))}</span></div><div class="incident-title">${escapeHtml(i.title)}</div><p class="incident-description">${escapeHtml(i.description)}</p><div class="incident-meta"><span>${escapeHtml(categories[i.category]||'Other')} · ${escapeHtml(i.address||'Pinned location')}</span><span>${shortDate(i.created_at)}</span></div></button>`).join(''):
-  `<div class="empty-state"><strong>${state.incidents.length?'No matching reports.':'Your community starts here.'}</strong><br>${state.incidents.length?'Try another filter or clear your search.':'No incidents have been submitted yet. Add a factual report to help build the shared picture.'}</div>`;
+  state.filtered=sourceFilter==='official'?[]:filteredIncidents();state.visibleHazards=filteredHazards();
+  $('#feedCount').textContent=state.filtered.length+state.visibleHazards.length;
+  const official=state.visibleHazards.map(h=>`<button class="incident-item official-item" data-hazard-id="${escapeHtml(h.id)}" type="button"><span class="source-label official-source">OFFICIAL · NWS</span><div class="incident-item-top"><strong>${escapeHtml(h.event)}</strong><span class="status-tag">${escapeHtml(h.severity)}</span></div><p class="incident-description">${escapeHtml(h.headline||h.area)}</p><div class="incident-meta"><span>${h.geometrySource==='affected_zone'?'Affected zone':h.geometry?'Alert boundary':'Area notice · no boundary'}</span><span>Until ${shortDate(h.expires)}</span></div></button>`).join('');
+  const community=state.filtered.map(i=>`<button class="incident-item" data-open-id="${i.id}" type="button"><span class="source-label">COMMUNITY · ${escapeHtml(statusLabel(i.status))}</span><div class="incident-item-top">${severityPill(i)}<span class="status-tag">${escapeHtml(categories[i.category])}</span></div><div class="incident-title">${escapeHtml(i.title)}</div><p class="incident-description">${escapeHtml(i.description)}</p><div class="incident-meta"><span>${escapeHtml(i.address||'Pinned location')}</span><span>${shortDate(i.created_at)}</span></div></button>`).join('');
+  $('#incidentFeed').innerHTML=official+community||'<div class="empty-state"><strong>No matching situations to display.</strong><br>Try another source, type, search radius, or location. This does not establish that the area is safe.</div>';
   if(!state.map)return;
   state.markers?.clearLayers();
   for(const i of state.filtered){
-    const severity=i.status==='resolved'||i.status==='rejected'?'resolved':i.severity;
+    const severity=['resolved','rejected'].includes(i.status)?'resolved':i.severity;
     const marker=L.marker([i.lat,i.lon],{icon:L.divIcon({className:'',html:`<div class="map-pin ${severity}"><span>${symbols[i.category]||'!'}</span></div>`,iconSize:[38,38],iconAnchor:[20,36]})});
-    marker.bindTooltip(escapeHtml(i.title),{direction:'top',offset:[0,-29]});
-    marker.on('click',()=>openIncident(i.id));state.markers.addLayer(marker);
+    marker.bindTooltip(escapeHtml(i.title),{direction:'top',offset:[0,-29]});marker.on('click',()=>openIncident(i.id));state.markers.addLayer(marker);
   }
+  renderHazardAreas();
 }
 function initializeMap(){
   if(state.map||typeof L==='undefined'){
@@ -242,28 +280,10 @@ function initializeMap(){
   const initial=[26.3683,-80.1289];
   state.map=L.map('incidentMap',{zoomControl:true}).setView(initial,9);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'}).addTo(state.map);
-  state.markers=L.layerGroup().addTo(state.map);state.weatherLayer=L.geoJSON(null,{style:weatherStyle,onEachFeature:(feature,layer)=>{
-    layer.bindPopup(`<strong>${escapeHtml(feature.properties.event)}</strong><p>${escapeHtml(feature.properties.headline)}</p><small>Official National Weather Service alert</small>`);
+  state.markers=L.layerGroup().addTo(state.map);state.weatherLayer=L.geoJSON(null,{style:feature=>({color:['Extreme','Severe'].includes(feature.properties.severity)?'#ac412f':'#b57b22',weight:2,fillOpacity:.13,dashArray:feature.properties.geometrySource==='affected_zone'?'6 4':undefined}),onEachFeature:(feature,layer)=>{
+    layer.bindTooltip(escapeHtml(feature.properties.event));layer.on('click',()=>openHazard(feature.properties.id));
   }});
-  state.mapReady=true;renderIncidents();renderAlerts();
-}
-function weatherStyle(feature){const s=feature.properties.severity;return {color:s==='Extreme'?'#c44341':s==='Severe'?'#e87549':'#e9ac54',weight:2,fillOpacity:.09,dashArray:'5 5'};}
-function renderAlerts(){
-  const meta=state.weatherMeta;
-  $('#nwsMeta').textContent=!meta?'Loading official feed…':meta.status==='live'?`NWS ${meta.area} · ${state.alerts.length} current alerts · Updated ${shortDate(meta.fetchedAt)}`:'Official alert service unavailable; last attempt '+shortDate(meta.fetchedAt);
-  const feed=$('#alertsFeed');
-  if(meta?.status==='unavailable') feed.innerHTML='<div class="empty-state">Official weather alert feed is temporarily unavailable. Check <a href="https://www.weather.gov/" target="_blank" rel="noopener noreferrer">weather.gov ↗</a> directly.</div>';
-  else if(!state.alerts.length)feed.innerHTML='<div class="empty-state">No active official alerts returned for the configured state. This does not guarantee safe conditions.</div>';
-  else feed.innerHTML=state.alerts.slice(0,8).map(a=>`<article class="alert-card"><small>OFFICIAL NWS · ${escapeHtml(a.severity||'UNKNOWN')}</small><h3>${escapeHtml(a.event)}</h3><p>${escapeHtml(a.area)}</p><p>${escapeHtml(a.headline)}</p></article>`).join('');
-  if(state.map&&state.weatherLayer){
-    state.weatherLayer.clearLayers();
-    if($('#alertsToggle').checked){
-      for(const a of state.alerts)if(a.geometry){
-        try{state.weatherLayer.addData({type:'Feature',properties:{event:a.event,headline:a.headline,severity:a.severity},geometry:a.geometry});}catch(e){console.warn('Skipped invalid alert shape',e);}
-      }
-      state.weatherLayer.addTo(state.map);
-    }else if(state.map.hasLayer(state.weatherLayer))state.map.removeLayer(state.weatherLayer);
-  }
+  state.mapReady=true;renderIncidents();
 }
 function setReportPin(lat,lon,source='map'){
   $('#reportLocationStatus').textContent=source==='address'?'Address found. Location is ready; map selection is optional.':'Location set using the map or coordinates.';
@@ -301,7 +321,8 @@ async function submitReport(e){
     const b=Object.fromEntries(new FormData(form).entries());b.lat=Number(b.lat);b.lon=Number(b.lon);
     if(!Number.isFinite(b.lat)||Math.abs(b.lat)>90||!Number.isFinite(b.lon)||Math.abs(b.lon)>180)throw Error('Choose a valid location.');
     const result=await api('/api/incidents',{method:'POST',body:b});closeDialog('#reportDialog');
-    await fetchIncidents();location.hash='#map';
+    searchArea={lat:result.incident.lat,lon:result.incident.lon};$('#areaAddress').value=result.incident.address||'';
+    await fetchIncidents();fetchHazards();location.hash='#map';
     setTimeout(()=>{state.map?.setView([result.incident.lat,result.incident.lon],14);openIncident(result.incident.id);},120);
     toast('Your report is now on the map and awaiting verification.');
   }catch(ex){formError('#reportError',ex.message)}finally{loadingButton(button,false,'Publish community report ↗');}
@@ -440,9 +461,11 @@ async function initialize(){
   $('#reportAddress').addEventListener('input',clearReportLocation);
   $('#findReportAddress').addEventListener('click',async()=>{const button=$('#findReportAddress');loadingButton(button,true);formError('#reportError','');try{await findReportAddress();}catch(error){formError('#reportError',error.message);}finally{loadingButton(button,false,'Find address');}});
   $('#reportMapOptions').addEventListener('toggle',()=>{if($('#reportMapOptions').open)state.reportMap?.invalidateSize();});
-  $('#weatherLocationForm').addEventListener('submit',findWeatherAddress);
-  $('#weatherAddress').addEventListener('input',()=>{weatherLookupVersion++;weatherAddressMatches=[];$('#weatherAddressResults').innerHTML='';});
-  $('#weatherMapArea').addEventListener('click',()=>{const point=state.map?.getCenter();if(point){weatherPoint={lat:point.lat,lon:point.lng};$('#weatherAddress').value='';fetchLocalWeather();}});
+  $('#areaSearchForm').addEventListener('submit',findAreaAddress);
+  $('#radiusFilter').addEventListener('change',()=>{renderIncidents();fetchHazards();});
+  $('#hazardTypeFilter').addEventListener('change',renderIncidents);
+  $('#areaAddress').addEventListener('input',()=>{areaLookupVersion++;areaAddressMatches=[];$('#areaAddressResults').innerHTML='';});
+  $('#searchMapArea').addEventListener('click',()=>{const point=state.map?.getCenter();if(point){searchArea={lat:point.lat,lon:point.lng};$('#areaAddress').value='';fetchHazards();}});
   $('#categoryFilter').addEventListener('change',()=>{selectedReportTypes.clear();if($('#categoryFilter').value)selectedReportTypes.add($('#categoryFilter').value);updateTypeChips();renderIncidents();});
 
   $('#useLocation').addEventListener('click',()=>{
@@ -460,8 +483,8 @@ async function initialize(){
   $$('#refreshButton,#adminRefresh,#tasksRefresh').forEach(b=>b.addEventListener('click',refreshAll));
   $$('#statusFilter,#severityFilter,#sortFilter,#myReportsFilter').forEach(el=>el.addEventListener('change',renderIncidents));
   $('#searchFilter').addEventListener('input',()=>{clearTimeout(debounceTimer);debounceTimer=setTimeout(renderIncidents,170)});
-  $('#clearFilters').addEventListener('click',()=>{$('#searchFilter').value='';$('#categoryFilter').value='';selectedReportTypes.clear();updateTypeChips();$('#statusFilter').value='';$('#severityFilter').value='';$('#sortFilter').value='priority';$('#myReportsFilter').checked=false;renderIncidents()});
-  $('#alertsToggle').addEventListener('change',renderAlerts);
+  $('#clearFilters').addEventListener('click',()=>{$('#searchFilter').value='';$('#hazardTypeFilter').value='';sourceFilter='all';$$('[data-source-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sourceFilter==='all')));$('#categoryFilter').value='';selectedReportTypes.clear();updateTypeChips();$('#statusFilter').value='';$('#severityFilter').value='';$('#sortFilter').value='priority';$('#myReportsFilter').checked=false;renderIncidents()});
+  $('#alertsToggle').addEventListener('change',renderHazards);
   $('#recenterButton').addEventListener('click',fitReports);
   $('#mobileMenu').addEventListener('click',()=>{const open=$('.nav-links').classList.toggle('open');$('#mobileMenu').setAttribute('aria-expanded',String(open));});
   $$('[data-close]').forEach(btn=>btn.addEventListener('click',()=>closeDialog('#'+btn.dataset.close)));
@@ -472,8 +495,10 @@ async function initialize(){
   }));
   $('#authDialog').addEventListener('close',()=>{if(!state.user)pendingReport=false;});
   document.body.addEventListener('click',e=>{
+    const source=e.target.closest('[data-source-filter]');if(source){setSourceFilter(source.dataset.sourceFilter);return;}
+    const hazard=e.target.closest('[data-hazard-id]');if(hazard){openHazard(hazard.dataset.hazardId);return;}
     const type=e.target.closest('[data-report-type]');if(type){toggleReportType(type.dataset.reportType);return;}
-    const address=e.target.closest('[data-address-kind]');if(address){const matches=address.dataset.addressKind==='report'?reportAddressMatches:weatherAddressMatches,match=matches[Number(address.dataset.addressIndex)];if(match){if(address.dataset.addressKind==='report')useReportAddress(match);else useWeatherAddress(match);}return;}
+    const address=e.target.closest('[data-address-kind]');if(address){const matches=address.dataset.addressKind==='report'?reportAddressMatches:areaAddressMatches,match=matches[Number(address.dataset.addressIndex)];if(match){if(address.dataset.addressKind==='report')useReportAddress(match);else useAreaAddress(match);}return;}
     const op=e.target.closest('[data-open-id]');if(op){openIncident(op.dataset.openId);return;}
     const edit=e.target.closest('[data-edit-team]');if(edit){openTeam(edit.dataset.editTeam);return;}
     const prog=e.target.closest('[data-progress-id]');if(prog){updateAssignment(prog.dataset.progressId,prog.dataset.progressStatus);return;}
@@ -482,7 +507,7 @@ async function initialize(){
   window.addEventListener('hashchange',route);
   try{const me=await api('/api/auth/me');state.user=me.user;}catch(e){console.warn('Auth check failed',e)}
   updateAuthUI();route();
-  await refreshAll();
+  const initialRefresh=refreshAll();
   route();
   try{
     const events=new EventSource('/api/stream');state.stream=events;
@@ -502,7 +527,8 @@ async function initialize(){
     });
   }catch(e){console.warn('Live events unavailable',e)}
   setInterval(()=>{if(document.visibilityState==='visible')fetchIncidents().catch(showConnectionError);},60000);
-  setInterval(()=>{if(document.visibilityState==='visible'){fetchAlerts().catch(()=>{});fetchLocalWeather();}},10*60000);
+  setInterval(()=>{if(document.visibilityState==='visible')fetchHazards();},2*60000);
+  await initialRefresh;
 }
 document.addEventListener('DOMContentLoaded',initialize);
 

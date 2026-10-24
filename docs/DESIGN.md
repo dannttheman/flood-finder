@@ -1,48 +1,34 @@
-# Flood Finder: community edition
+# Design direction: Local Hazard Map
 
-## Purpose
-Help residents share factual storm-related incidents, help people understand reported conditions, and help authorized coordinators organize a response. The core loop is Report → Review → Respond. This revision preserves that idea and the original roles and database model.
+## Primary task
 
-This design was implemented and visually inspected in the browser. Figma authoring remains pending because the current chat does not expose Figma tools and the browser requires sign-in. Do not describe this document as a completed Figma file.
+Find a local situation, understand its source and affected area, and report or review it. Map is the initial view. The interface should look like a usable local information tool rather than a marketing landing page or a general weather dashboard.
 
-## Visual direction
-- Background: cool off-white `#f6f8fb`.
-- Text: navy `#20374e`; secondary text `#607489`.
-- Primary action: blue `#285f9e`, with white text.
-- Warm coral for illustrative hazards; severity labels keep both words and color.
-- White cards with thin borders, 16–20 px corners, and restrained shadows.
-- System sans-serif typography. Large, short headings; plain descriptions; prominent report and map actions.
-- Decorative home illustration is explicitly labeled Illustration. Actual report counts come from the database.
+## Applied Sites guidance
 
-## Screen plan for Figma
-Create Desktop / Overview, Desktop / Incident map, Mobile / Overview, Mobile / Incident map, and Report dialog frames.
+The Sites skill was used in local-only mode: build around the primary task, preserve the existing brand, use readable responsive layouts, keep interactions accessible, implement bounded functionality, and verify the local preview. No Site was registered or published, because publishing was explicitly deferred. The current Node/SQLite backend remains intact.
 
-Overview: white navigation, two-column introduction with two actions and a labeled community illustration, actual community counts, three workflow cards, and a final map link. On narrow screens the introduction and illustration stack.
+## Layout
 
-Incident map: heading and update status, refresh/report actions, report list beside the map, and official NWS alerts below. Filters cover type, status, priority, sort order, and signed-in ownership. On narrow screens the map precedes the report list. The map's Fit reports action frames the current results.
+A compact white header contains the brand and Map/About/How it works navigation. Search an address, select a radius, or use Search this map. A short source/status line precedes the main workspace. The situation list sits beside the map on desktop; the map comes first on narrow screens. The oversized hero illustration and temperature/forecast dashboard have been removed.
 
-Report dialog: category and urgency, factual title and description, optional landmark, location pin or coordinate entry, and a publication action. Signing in from the report action resumes the report dialog. Reports remain unverified until reviewed.
+The list separates Official from Community records through source labels, filtering, and distinct visual treatment. Official areas have subdued amber/red boundaries; community reports are pins with priority information. A dashed radius shows the search scope. Shapes communicate affected regions, not exact disaster locations.
 
-Command center: review queue, actual metrics, teams, and user roles. Incident details expose review and assignment controls to administrators.
+## Visual system
 
-My assignments: the team lead advances one step at a time through Acknowledged → En route → On scene → Completed. Rejected incidents cancel active work. Reopening an incident with its former team creates a fresh assignment.
+System Arial/Helvetica typography, white and light-gray surfaces, dark gray text, restrained green actions, thin borders, and small corner radii. No decorative gradients, oversized slogans, floating mock reports, avatar stacks, or fake incident activity. Map content and source evidence provide the visual detail.
 
-## Interaction and accessibility
-- Clear empty states distinguish no submissions from no matching results.
-- Keyboard focus, a skip link, current-page navigation, and menu expansion state are included.
-- Motion is disabled when the device requests reduced motion.
-- Smaller screens use stacked forms and at least 16 px input text.
-- Report refresh failures display a visible stale-information notice. Disconnected live updates show Reconnecting.
-- Official alerts and community reports remain separate sources. Routes are estimated, not flood-safe guarantees.
+## Interaction rules
 
-## Validation
-Automated tests cover authentication and roles, report creation, dispatch and progress, cancellation/reopening, availability, ownership/priority filtering, and bursts of live-update events. Browser checks cover the home view, incident map, map tiles, official alert loading, and navigation at the available viewport sizes.
+- Map is the default view; About explains scope and data sources.
+- Street address entry is primary for a new report. Map/coordinate adjustment is optional.
+- Multiple community report types can be selected. Official types have a separate filter.
+- Source filters offer All sources, Official, and Community.
+- Official layer starts enabled. Turning it off hides polygons; feed notices retain their source.
+- Official alert details preserve issuer description, instructions, affected geography, timing, and a source link.
+- Errors/partial coverage are visible, and empty results are not presented as a safety finding.
+- Keyboard focus, menu expansion state, skip navigation, dialog labels, and reduced-motion handling remain supported.
 
-## Remaining design work
-Save the above frames in Figma after account access is available. Validate on a physical phone and with representative residents and coordinators. Challenge submission eligibility, attribution, and rules have not been assessed as part of this code revision.
+## Future publishing
 
-## v2 — Address and weather workflow
-
-Reports accept a full street address and automatically resolve coordinates before submission. The map sits in an optional disclosure for adjustment and addressless locations. Ambiguous addresses show selectable results; editing an address invalidates its old coordinates.
-
-The incident panel offers multi-type quick filters synchronized with the single-type dropdown. A separate weather workspace shows independently retrieved NWS station observations and forecasts, their source times, and missing/stale states. A public address lookup or the current map area selects its location.
+Keep this same task-first direction when hosting is selected. The current work does not claim that Sites/Render has hosted the application or that a public launch/security review is complete.

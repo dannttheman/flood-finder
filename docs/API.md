@@ -1,31 +1,86 @@
-# Location and weather APIs
+# HTTP API reference
 
-These public read-only endpoints supplement community reporting. Account emails, passwords, and report descriptions are never sent to the providers. The browser calls this app's API; the server talks to government APIs with timeouts and a configured user agent.
+All endpoints are same-origin JSON unless noted. Mutating JSON requests require `Content-Type: application/json` and `X-FloodFinder: 1`. Sessions use an HttpOnly cookie. Errors return an `error` string with an appropriate HTTP status.
 
-## GET /api/geocode?address=...
+## Public reads
 
-An explicit U.S. street address lookup. Requires 8–250 characters. Uses the U.S. Census `locations/onelineaddress` endpoint with benchmark `Public_AR_Current` and JSON output. Returns up to five matches containing `address`, `lat`, and `lon`, plus provider and message fields. No match returns an empty `matches` array. Provider failures return HTTP 503; invalid input returns 400. Rate limit: 20 requests per client IP per minute.
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/health` | Service health and server time |
+| `GET /api/stats` | Community totals, active/critical/resolved counts |
+| `GET /api/incidents` | Public community incidents; optional category/status/severity/q/bbox filters, maximum 1,500 |
+| `GET /api/incidents/:id` | Community incident details and public update history |
+| `GET /api/stream` | Server-sent `change` events; not JSON |
+| `GET /api/geocode?address=...` | Census street address resolution |
+| `GET /api/hazards?lat=...&lon=...&radius=25` | Current nearby official hazard areas |
+| `GET /api/alerts` | Retained state-configured NWS alert endpoint |
+| `GET /api/weather?lat=...&lon=...` | Retained station/forecast endpoint; not used by main map |
 
-Census interpolates address coordinates from its address data. It is not a general business/place-name search and does not guarantee exact entrances. Addresses are sent to Census only when lookup is requested or an address-only report is submitted.
+## Authentication and community reporting
 
-## GET /api/weather?lat=...&lon=...
+| Endpoint | Access / fields |
+| --- | --- |
+| `POST /api/auth/register` | Public; name, email, password. Creates Resident account |
+| `POST /api/auth/login` | Public; email, password |
+| `POST /api/auth/logout` | Clears session |
+| `GET /api/auth/me` | Current user or null |
+| `POST /api/incidents` | Signed in; title, description, category, severity, lat, lon, optional address |
+| `GET /api/incidents/mine` | Signed in; maximum 200 own community incidents |
 
-Requires valid latitude/longitude. Uses NWS `/points/{latitude},{longitude}` to discover a forecast and observation stations, then fetches the latest observation from a nearby listed station and up to four future forecast periods. Linked discovery URLs must remain on `https://api.weather.gov`.
+Browser address-first submission calls geocode before POST, which still requires validated coordinates. The server does not accept an unresolved address as a location.
 
-Returns `source`, `status`, `fetchedAt`, `location`, `observation`, `forecast`, and `message`. Status is `live`, `partial`, or `unavailable`. Station observation times are retained; observations older than two hours are flagged. Null or unsupported unit values remain null. Temperature is converted from Celsius to Fahrenheit, wind from supported SI units to mph, and precipitation to millimeters. Forecast probabilities are not observations.
+## Teams, assignments, administration
 
-Cache: ten minutes per location rounded to 0.001 degrees; one minute for unavailable results; up to 100 cached locations. Concurrent requests for a cached location key share an in-flight fetch. Rate limit: 30 requests per client IP per minute. Invalid input returns 400. Provider or coverage failures return a structured unavailable result; no fake fallback readings are generated.
+| Endpoint | Access |
+| --- | --- |
+| `GET /api/teams` | Responder/Admin |
+| `GET /api/assignments/mine` | Responder/Admin; responder results scoped to their lead role |
+| `PATCH /api/assignments/:id` | Assigned lead/Admin; next progress state only |
+| `GET /api/route` | Responder/Admin; valid from/to coordinates; estimated OSRM route |
+| `GET /api/admin/users` | Admin |
+| `PATCH /api/admin/users/:id` | Admin; resident/responder/admin role |
+| `POST /api/admin/teams` | Admin; team fields and validated lead |
+| `PATCH /api/admin/teams/:id` | Admin; team metadata/location/lead/availability |
+| `PATCH /api/admin/incidents/:id` | Admin; review status, severity, team assignment, public note |
+| `GET /api/admin/metrics` | Admin; community/operations counts and activity |
 
-## Existing alerts
+Official NWS records are read-only provider data; they do not use the community incident mutation endpoints.
 
-`GET /api/alerts` continues to serve NWS alerts for the state configured by `NWS_AREAS` (default `FL`). Selecting a weather address does not change the server's statewide alert feed. Community incidents remain a separate database-backed source.
+## Geocoding contract
 
-## Configuration and tests
+`GET /api/geocode?address=...` requires 8–250 characters and returns `source`, `matches`, and `message`. Each of up to five matches has `address`, `lat`, and `lon`. No match returns an empty array. Invalid input returns 400; provider failure returns 503. Limit: 20 requests/client IP/minute.
 
-No provider API keys are required under the documented public API interfaces. Set `NWS_USER_AGENT` to an application identifier with an appropriate public project contact for deployment. Set it in the shell or hosting service; `.env` is not loaded automatically.
+Provider: Census `locations/onelineaddress`, benchmark `Public_AR_Current`, JSON format. Supported street-address coverage and interpolation limitations are described in Data Sources.
 
-Run `npm test`. Mocked tests cover provider outages, missing values, stale observations, unit conversions, no address match, invalid coordinates, caching, unsafe discovery URLs, automatic location from an address, and report-type combinations. Live checks should use public civic addresses instead of personal addresses.
+## Local hazards contract
 
-Provider documentation:
+`GET /api/hazards?lat=...&lon=...&radius=...` validates latitude/longitude and radius 1–100 km; default radius is 25. Invalid input returns 400. Limit: 30 requests/client IP/minute.
+
+Response:
+- `source`: National Weather Service.
+- `status`: `live`, `partial`, or `unavailable`.
+- `location`: requested lat/lon and discovered city/state label.
+- `radiusKm`: selected radius.
+- `fetchedAt`: server fetch timestamp.
+- `hazards`: deduplicated official records whose geometry intersects the search radius, or identified point-applicable text notices.
+- `message`: explicit empty/partial/unavailable information.
+
+Each hazard preserves `id`, `event`, grouped `category`, `severity`, `urgency`, `certainty`, `headline`, `description`, `instruction`, `area`, effective/onset/expiry/sent times, a source `url`, `geometry`, `geometrySource`, and `locationNote`.
+
+`geometrySource` is `alert_polygon`, `affected_zone`, or `text_only`. A geometry is returned as GeoJSON MultiPolygon; text-only records have null geometry. No exact hazard coordinates or invented centroids are generated. Empty results and unavailable data remain distinct.
+
+The adapter fetches NWS point/state alerts, resolves zone boundaries, and filters expired/test/cancelled messages. Linked zone requests must stay on `https://api.weather.gov`. Geometry/proximity limitations, caps, and cross-state coverage limits are in Data Sources.
+
+Cache: two minutes per rounded 0.001-degree center/radius, 30 seconds for unavailable responses, up to 100 keys. Identical pending requests share one fetch. Zone shapes cache for one day, bounded to 100 entries. Each provider request times out after eight seconds. A zone budget/deadline prevents unlimited expansion; incomplete results are partial.
+
+## Legacy station/forecast contract
+
+`/api/weather` still returns source/status/fetch time/location, nearby station observation, up to four forecast periods, and a message. Missing measurements stay null; old observations are flagged; documented temperature/wind/rain units are converted. It is retained for compatibility and is not the main product interface or an incident-detection algorithm.
+
+## Configuration
+
+No government provider API keys are currently required by the documented public interfaces. Set `NWS_USER_AGENT` to a suitable application identifier/public project contact before deployment. `.env` is not auto-loaded.
+
+Provider references:
 - https://www.weather.gov/documentation/services-web-api
 - https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html

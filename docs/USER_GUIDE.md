@@ -1,176 +1,139 @@
-# Flood Finder v2 — User Guide
+# Flood Finder — Local Hazard Map user guide
 
-Flood Finder combines public community reports with National Weather Service observations, forecasts, and alerts. Residents report what they see; authorized coordinators review those reports and assign response crews. Weather data loads independently and does not require someone to submit a report.
+## What this app is for
 
-## 1. Open the right version
+Find local situations around a chosen address: official weather-related hazard areas and reports from people in the community. The map is the starting point. It is not a general weather forecast app, and it does not automatically detect every kind of disaster.
 
-For the local v2 preview, open **http://localhost:3002** while its server is running. The original uses port 3000, and the earlier interface draft uses port 3001. These are local previews on this computer, not public websites. A deployed Render version will have its own HTTPS address.
+**Official** records come from the National Weather Service. **Community** records come from registered users and start unverified. The source label remains visible in the situation list and details.
 
-To start this version later, open Terminal in the `flood-finder-v2-weather-addresses` folder and run:
+## Open the application
+
+The current local preview is **http://localhost:3002** while its server is running. To start it later, open Terminal in `flood-finder-local-hazard-map` and run:
 
 ```sh
 PORT=3002 npm start
 ```
 
-Node.js 22.13 or newer, below version 25, is required. No package installation, weather API key, geocoding API key, or separate database account is needed. Keep Terminal running. Press Control+C to stop it. Accounts and reports are saved in this version's `data` folder; do not delete it if you want to keep them.
+Use Node >=22.13.0 and <25. No `npm install` or API key is required. Keep Terminal running; Control+C stops the server. This URL is local to this computer, not a public website. Publishing will be handled separately.
 
-The GitHub branch for this version is **`flood-finder-v2-weather-addresses`**. See [Versions](VERSIONS.md) for the original and earlier draft. A draft pull request is a reviewable set of changes, not a running website. The source files live in the named branch.
+The original and the earlier interface draft are documented in [Versions](VERSIONS.md). Their databases/accounts are separate. The repository branch names identify the actual source versions; a draft pull request is the review page for changes.
 
-## 2. Browse without an account
+## 1. Choose your area
 
-From Overview, select **Explore incident map**, or use **Incident map** in navigation. You can browse community reports, use filters, open report details, and read weather without signing in. On narrow screens, open the menu to see navigation links.
+1. Enter a full U.S. street address in **Search your area**. Include street number, street name, city, state, and preferably ZIP.
+2. Select **Find area**. A single match updates the map automatically. If several addresses match, choose the correct one.
+3. Select a search radius: 10, 25, 50, or 100 km (approximately 6, 16, 31, or 62 miles).
+4. You can also pan the map and select **Search this map** to use its current center.
 
-An empty report list means no matching community submissions exist. Weather observations and forecasts still load independently. The illustration on Overview is labeled **Illustration** and is not a live incident map. Community counts reflect submitted reports.
+The dashed circle shows the search radius. Community reports are included when their coordinates are inside it. Official areas are included when their boundaries intersect the search area; the original affected boundary can extend outside the circle. Pan/zoom alone does not silently change the search center—select Search this map when ready.
 
-## 3. Choose the weather location
+Address lookup uses the U.S. Census geocoder. It needs a street address, not just a business name or landmark. The entered address is sent to Census; your account details and incident description are not sent. It calculates approximate address coordinates. If lookup fails, correct the address or select an area by moving the map.
 
-The weather section initially uses the app's South Florida starting point. It does not infer your home address or automatically request device location.
+## 2. Read the map
 
-For a different location:
+### Official shaded areas
 
-1. Enter a full U.S. street address under **Weather location**. Include street number, street name, city, state, and preferably ZIP code.
-2. Select **Find weather**.
-3. If the geocoder returns one match, the map centers on it and the weather updates automatically. If multiple matches appear, select the correct one.
-4. Alternatively, pan the incident map to your area and select **Use current map area**.
+Amber/red shading represents an official warning, watch, advisory, or relevant statement. Click the area or its list item for the issuing source, affected area, timing, description, and instructions.
 
-Weather address searches change the viewing area; they do not submit incidents.
+A solid alert boundary comes from the alert polygon. A dashed affected-zone boundary is an official zone that can be broader than the actual hazard. Neither means every street inside it is damaged. A notice without usable geometry stays in the list as **Area notice · no boundary** rather than receiving a made-up location pin.
 
-### What the weather readings mean
+A watch may describe a threat; it is not proof of current damage. Check onset/expiry and the issuer's own text. The app preserves those distinctions rather than labeling every alert a confirmed disaster.
 
-The weather section includes:
+### Community pins
 
-- **Temperature:** the nearby station's latest reported temperature, converted to Fahrenheit.
-- **Wind:** the station's reported wind speed, converted to miles per hour.
-- **Relative humidity:** the station's humidity reading, when available.
-- **Rain · last hour:** the station's reported precipitation during the preceding hour, in millimeters.
-- **Upcoming forecast:** up to four NWS forecast periods, including forecast temperature, conditions, wind, and rain probability where supplied.
+Pins show submitted incident locations. Priority colors help sort urgency; review status describes whether the report is new, reviewed, dispatched, being worked, resolved, or rejected. A report starts Reported/unverified. Administrative verification is a human review recorded in the app, not certification by NWS.
 
-The **station ID**, **observation time**, and **fetch time** are displayed. Fetch time is when Flood Finder retrieved the data, not when the station measured it. Observations older than two hours are flagged. Forecasts describe upcoming periods and are not station measurements.
+### Missing or partial data
 
-**Not reported** means the provider did not return a usable reading. It does not mean zero rain, zero wind, or clear weather. If observations or the forecast are missing, the section says **Partial / older data**. If NWS cannot serve the location or its service is unavailable, the app shows an unavailable notice and keeps community reporting usable.
+The short status line tells you when official data was fetched. **Partial coverage** means some provider requests or area boundaries could not be loaded. **Unavailable** means the official feed could not load for that location. Community reports can remain usable independently. The app never invents hazards to fill an empty map, and no returned alerts/reports does not establish safety.
 
-NWS data covers supported U.S. locations. Nearby station conditions can differ from the incident location. Weather is not used to invent community incidents or automatically verify flood depth or road safety.
+Official coverage is weather-related and scoped to supported U.S. point/state data. Surrounding alerts from neighboring states can be missed. Automatic outage detection, road-closure feeds, structure-fire detection, earthquake feeds, and live emergency dispatch are not implemented.
 
-### Official weather alerts
+## 3. Filter situations
 
-Below the incident workspace is the **National Weather Service alerts** section. These alerts come from NWS, not community submissions. The server's `NWS_AREAS` setting selects the state; its default is Florida. Changing the weather address does not change this state-wide alert feed.
+Select **All sources**, **Official**, or **Community**.
 
-Enable **NWS alerts** on the map to show alert polygons where NWS supplies them. Some alerts have no map geometry and appear only as text. The text section shows up to eight returned alerts; the source label displays the number returned by the API. Check weather.gov for the full official information.
+For official records, choose an **Official hazard type**: flooding, severe storms, wind/dust, fire weather, winter/cold, heat, coastal/marine, or other official alerts. Fire weather describes an official weather condition, not necessarily an active fire.
 
-## 4. Filter specific report types
+For community records, select one or more report-type buttons: Flooding, Roads, Power, Medical/safety, Debris, Shelter, or Other. Selected buttons are highlighted. Select a button again to remove it, or All reports to remove category restrictions. The Report type dropdown is a compact single-category alternative and replaces the button selection.
 
-The report panel provides **Quick report types** buttons:
+Community filters also include Status, Priority, Sort by, and Only my reports after sign-in. Priority first puts open urgent reports ahead of closed/lower-priority ones. Newest first sorts submissions by time. These community filters do not hide official areas; use the official-type or source control for those.
 
-- **Flooding:** flooding or high water.
-- **Roads:** blocked or damaged roads and access issues.
-- **Power:** electrical and utility outages.
-- **Medical / safety:** reported medical or safety concerns.
-- **Debris:** storm debris and damage.
-- **Shelter:** shelter or supply needs.
-- **Other:** reports outside the listed categories.
+Text search matches community titles/descriptions/addresses/IDs and official event/headline/area text. It searches the returned situations; it is not the same as street-address lookup.
 
-Select one type to show that category. Select additional types to combine them—for example, Flooding and Roads. Selected buttons are filled blue. Select a type again to remove it, or select **All reports** to remove the type restriction.
+**Fit reports** frames matching community pins and official areas. With no matching geometry it frames the search circle. The reset arrow clears text/source/type/status/priority/sort/ownership filters, while keeping your chosen area and radius. The Official areas map toggle hides/shows official polygons and does not change their source attribution in the list.
 
-The **Report type** dropdown is a compact alternative for choosing one category. Changing it replaces the quick-type selection. Selecting All incidents clears the category selection.
+The API currently returns at most 1,500 public community records and 200 own records per request. Client filters use those returned records, not an unlimited historical archive.
 
-You can combine type selections with:
+## 4. Create an account
 
-- **Search reports or area:** searches report titles, descriptions, landmarks/addresses, and IDs. This searches existing reports; it does not look up a new street address.
-- **Status:** Reported, Verified, Dispatched, In progress, Resolved, or Rejected.
-- **Priority:** Low, Moderate, High, or Critical.
-- **Sort by:** Priority first puts open urgent reports ahead of lower-priority or closed reports. Newest first orders by submission time.
-- **Only my reports:** available after sign-in; shows your own submissions within the returned records.
+Browsing needs no account. Select Create account or Report a situation to register. Use your name, email, and a password with at least 12 characters. New accounts are residents. Sign in for an existing account. If you selected Report a situation first, the form opens after login.
 
-The report count and map markers reflect the filtered results. Select **Fit reports** to frame those markers on the map. Use the reset-arrow button beside Ground reports to clear search, types, status, priority, sorting, and ownership filters. The app returns up to 1,500 public incidents and up to 200 of your reports per request; it does not promise an unlimited archive.
+Sign out on a shared computer. Accounts created in another local copy are not automatically copied here.
 
-## 5. Create an account or sign in
+## 5. Report a situation by address
 
-Select **Create account**, or select **New report** and create an account from the dialog. Enter your name, an email address, and a password with at least 12 characters. New accounts are residents. Creating an account does not grant administrative or responder access.
+1. Select **Report a situation** and sign in if necessary.
+2. Choose the incident type and severity.
+3. Write a factual short title (5–120 characters) and description (15–2,000 characters). Explain what you saw, when, and relevant access issues.
+4. Enter the incident's full street address.
+5. Select **Publish community report**. The address is resolved to coordinates before submission; no map click is required.
 
-If you selected New report first, the app opens the report form after successful sign-in. Use **Sign in** for an existing account and **Sign out** when finished, especially on a shared computer. Local copies use separate databases: an account created in v1 is not automatically copied into v2.
+Use Find address first if you want to check the match. Multiple matches require choosing one before publication. If lookup returns no match, add street number/city/state/ZIP or use the optional map.
 
-## 6. Submit an incident using an address
+For addressless hazards or corrections, expand **Optional: adjust on map or enter coordinates**. Click or drag the marker, enter coordinates, or use device location with permission. Device location is where your device is, which may not be the incident. Editing the address clears its old coordinates. Confirm address text and the selected location agree.
 
-1. Select **New report** on the incident page or **Report an incident** on Overview.
-2. Choose the **incident type** and **severity**.
-3. Write a short title of 5–120 characters.
-4. Describe what you observed in 15–2,000 characters. Include useful facts, timing, and access conditions.
-5. Enter the incident's full U.S. street address in **Incident address**.
-6. Select **Publish community report**. The app looks up the address and fills its coordinates automatically before submitting. You do **not** have to click the map.
+After submission, the search center moves to your report and its details open. The report remains unverified until reviewed. Use Only my reports and clear restrictive filters if you cannot find it.
 
-You can select **Find address** before publishing to check the match. If multiple matches appear, select the correct address and then publish. If the address is incomplete or unmatched, add the street number, city, state, and ZIP code. The Census geocoder looks up street addresses; a business name or landmark alone may not match.
+### Public content
 
-For an addressless incident or a correction, expand **Optional: adjust on map or enter coordinates**. Click the optional map, drag its marker, enter latitude/longitude, or select **Use my location** and approve your browser's location request. Device location identifies where your device is, which may differ from the incident.
+Report titles, descriptions, addresses, coordinates, and operational histories are public to people with access to this application. Avoid names, phone numbers, sensitive medical details, and other private information. Account email/password data is not sent to the address/weather providers.
 
-Editing the address clears the previous coordinates so the report cannot silently use an old address's location. Selecting or adjusting the map sets a manual location. Confirm the address text and coordinates refer to the same incident before publishing.
+## 6. Open details
 
-After publication, the app opens the report details and shows its map location. Its initial status is **Reported**, which means unverified. Use **Only my reports** to find it later. If a filter hides your report, clear the filters.
+Community details show report content, review status, priority, location, assigned team, and history. Show on map centers the report; Copy coordinates uses the clipboard if available; Open navigation sends the selected destination to Google Maps. Routes are not verified to avoid flooding or damage.
 
-### Public information and address lookup
+Official details preserve the alert's own event, certainty, severity, affected area, expiry, description, and issuer instructions. Show affected area frames its geographic boundary. Open official alert links to the source. The app does not create a community report merely because an official warning overlaps the area.
 
-Report titles, descriptions, addresses, coordinates, and operational history are public to people who can access the app. Avoid personal names, phone numbers, medical details, or other private information in reports. Address lookup sends the entered address to the **U.S. Census Bureau**. It does not send your account email, password, or incident description. The service calculates coordinates from address data; the match is not a guarantee of exact building-entrance placement.
+## 7. Administrator workflow
 
-## 7. Read report details
-
-Select a report in the list or a marker on the map. The details show category, priority, review status, description, location, reporting time, assigned team, and incident history.
-
-- **Show on map** centers the incident.
-- **Copy coordinates** copies its location if clipboard access is available.
-- **Open navigation** opens Google Maps with that destination. Routes are not verified to avoid floodwater or storm damage.
-
-A community report is different from an official alert. A Verified status records an administrator's review; it is not an automated weather-provider certification.
-
-## 8. Administrator: review reports and manage teams
-
-The initial administrator must first register normally. The project owner then promotes that registered account using the server's database:
+First register normally. The project owner promotes that registered account from the correct source folder/deployed service and database:
 
 ```sh
 npm run admin -- promote your-registered-email@example.com
 ```
 
-Run the command in the correct local version or deployed service shell, with the same `DATABASE_PATH` as the server. Sign in again afterward. The command revokes the account's existing sessions.
+Sign in again afterward; promotion revokes the prior sessions.
 
-As an administrator:
+In Command center:
+1. Give a registered crew lead the Responder role.
+2. Create a response team with name, specialty, contact channel, availability, base coordinates if routing is needed, and a registered lead.
+3. Open a community incident, review status/priority, select a team, and add a public operational note.
+4. Select Save and dispatch.
 
-1. Open **Command center**.
-2. In **User directory**, give a registered crew lead the Responder role.
-3. Select **Add response team**. Enter a team name, specialty, contact channel, availability, base coordinates if routing is needed, and the registered lead.
-4. Open an incident from the priority queue or map.
-5. Review the report, set its status and priority, choose a response team, and add a useful public operational note.
-6. Select **Save and dispatch**. Assigning a team to a reported or verified incident moves it to Dispatched.
+Assigning a team to a reported/verified incident moves it to Dispatched. Rejecting an incident cancels active assignments. Resolving it completes active work. Reopening with the same team creates a fresh assignment. Team availability is manually managed, not live GPS/staffing data.
 
-Rejection cancels active assignments. Resolving a report completes active assignments. Reopening a closed incident with its team creates a fresh assignment. Team availability is an administrator-managed field, not a live GPS or automatic staffing guarantee.
+Official alerts are read-only source records and are not manually edited through the community incident controls.
 
-## 9. Responder: update assigned work
+## 8. Team lead workflow
 
-A registered responder sees **My assignments** after an administrator assigns that account as a team's lead and dispatches the team.
-
-Open the assignment to review location and details. Advance in this order:
+A registered responder assigned as the team's lead sees My assignments after dispatch. Advance one step at a time:
 
 **Assigned → Acknowledged → En route → On scene → Completed**
 
-The app exposes the next step and rejects skipped or backward steps. Completing an assignment marks the incident Resolved. Cancelled or reassigned work cannot be advanced. Responders cannot manage other teams' assignments; administrators have broader access.
+Completing the assignment resolves the incident. Skipped/backward progress and cancelled/reassigned work are rejected. A responder cannot update another team's work; administrators have broader permissions.
 
-## 10. Refreshing and troubleshooting
+## 9. Updates and troubleshooting
 
-- **Live updates connected:** report/team changes can arrive automatically. Reports also refresh periodically while the tab is visible.
-- **Reconnecting:** the live connection was interrupted. Use Refresh; visible report data can be older than current conditions.
-- **Report refresh notice:** the app could not refresh reports. It keeps the last displayed information and warns that it may be out of date.
-- **Weather unavailable:** the provider is down, the location is outside supported coverage, or no usable data was returned. Use Refresh or check weather.gov. Missing weather does not prevent a community report.
-- **Address lookup unavailable:** try again later or use the optional map/coordinates. A no-match message differs from a provider outage.
-- **Blank map:** confirm internet access. The map library and OpenStreetMap tiles load externally; reports and text weather may still work.
-- **No command center / assignments:** sign in with the appropriate role. Account registration alone creates a resident.
-- **Changes do not appear:** make sure you opened v2 on port 3002 and not an older preview. Reload only after saving any unfinished form.
+- Reports can arrive through live server-sent events and periodic refresh while visible.
+- Official hazards refresh roughly every two minutes while visible; server caching means Refresh may reuse a recent response.
+- Reconnecting refers to the live community-update connection. Use Refresh; visible data can be older than current conditions.
+- A report-refresh warning retains the last visible records and explicitly warns about stale information.
+- For official-feed failure, try again or check weather.gov. Missing official data does not prevent a community report.
+- A blank map can indicate external tile/library loading failure. Text records may still work.
+- Missing Command center/My assignments means the account lacks the required role or team-lead assignment.
+- If changes are missing, verify you are viewing the Local Hazard Map draft on port 3002, not an older local version. Do not reload an unfinished form without saving its contents elsewhere.
 
-Weather is cached for about ten minutes, including coordinate grouping to roughly 0.001 degrees, and refreshes periodically when the tab is visible. Unavailable responses are cached briefly to avoid hammering the provider. Refresh does not bypass those server caches. Address lookup is submitted explicitly or during publication, not on every keystroke.
+## Scope
 
-## 11. Intended scope
-
-Flood Finder is an experimental coordination app, not an emergency dispatch service or a flood prediction system. For immediate danger, contact local emergency services. Do not drive through floodwater or rely on this app's community reports, station data, or estimated routes as proof of safety.
-
-## Data sources
-
-- [National Weather Service API](https://www.weather.gov/documentation/services-web-api): official observations, forecasts, and alerts.
-- [U.S. Census Geocoding API](https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html): address-to-coordinate lookup for supported U.S. areas.
-- OpenStreetMap / Leaflet: interactive map display.
-- OSRM: estimated team-to-incident road routing, when requested by authorized users.
+Flood Finder is an experimental local awareness and coordination tool. It is not an emergency service, evacuation authority, flood-depth sensor, or universal disaster detector. For immediate danger, contact local emergency services. Never drive through floodwater or treat this map or estimated routes as proof of safety.

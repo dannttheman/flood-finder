@@ -2,11 +2,11 @@
 # Review and approve Render's displayed charges before applying this Blueprint.
 services:
   - type: web
-    name: flood-finder-v2-weather-addresses
+    name: local-hazard-map
     runtime: node
     branch: flood-finder-v2-weather-addresses
     plan: 0.5c-512mb
-    buildCommand: node --check server.js && node --check public/app.js && node --check services/location-weather.js
+    buildCommand: node --check server.js && node --check public/app.js && node --check services/location-weather.js && node --check services/hazards.js
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: off

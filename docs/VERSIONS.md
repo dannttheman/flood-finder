@@ -1,29 +1,32 @@
-# Flood Finder versions
+# Branches, drafts, and files
 
-Each GitHub branch contains a complete source version. The draft pull request is its review page; code is stored in the branch's real files.
-
-| Version | GitHub branch | Local folder | Local preview |
+| Branch | Purpose | Local folder | Local preview |
 | --- | --- | --- | --- |
-| Original | `main` | `flood-finder` | http://localhost:3000 |
-| v1 — Community Interface | `codex/flood-finder-redesign` | `flood-finder-edits` | http://localhost:3001 |
-| v2 — Weather & Address Reporting | `flood-finder-v2-weather-addresses` | `flood-finder-v2-weather-addresses` | http://localhost:3002 |
+| `main` | Original project | `flood-finder` | http://localhost:3000 |
+| `community-interface` | Earlier interface/workflow draft | `flood-finder-community-interface` | http://localhost:3001 when started |
+| `flood-finder-v2-weather-addresses` (rename to `local-hazard-map` pending) | Current nearby-hazard map draft | `flood-finder-local-hazard-map` | http://localhost:3002 |
 
-The original and v1 are preserved. The v1 and v2 draft pull requests are alternative complete versions against main; review the version you want before merging. v2 is a separate draft based on v1. It adds direct-address reporting, multi-type report filters, independent NWS observations and forecasts, and an expanded user guide.
+The first working branch was previously `codex/flood-finder-redesign`; the requested new name for `flood-finder-v2-weather-addresses` is `local-hazard-map`. The second rename is pending because the Mac is locked. GitHub's rename operation may close head-branch draft comparisons; replacement named drafts preserve review access. Historical drafts remain in repository history. Each branch holds complete real source files; the draft pull request is the review page, not a separate copy of the files.
 
-## File organization
+`main` remains unchanged. The two working drafts are alternative complete versions against `main`; review the version you want rather than merging both blindly. Runtime databases are ignored and remain separate between local copies.
 
-- `server.js`: HTTP routes, authentication, permissions, and API caching/rate limits.
-- `services/location-weather.js`: Census geocoding and NWS weather adapters.
-- `store.js`: persistent SQLite schema and transactions.
-- `public/index.html`: browser screens and forms.
-- `public/app.js`: browser interactions, filtering, address lookup, and weather display.
-- `public/styles.css`: responsive interface styling.
-- `test/api.test.js`: account, incident, team, and assignment integration tests.
-- `test/client.test.js`: report filters, automatic address location, and live-update regression tests.
-- `test/location-weather.test.js`: provider adapters and new API endpoint tests.
-- `docs/USER_GUIDE.md`: detailed instructions for residents, administrators, and responders.
-- `docs/API.md`: new endpoint contracts and data-source behavior.
-- `docs/DESIGN.md`: visual and interaction plan.
-- `docs/RENDER.md` and `render.yaml`: deployment proposal; not a live deployment.
-- `.github/workflows/test.yml`: GitHub test workflow.
-- `data/`: local runtime data only; excluded from GitHub.
+## Source map
+
+| File/directory | Language/format | Responsibility |
+| --- | --- | --- |
+| `server.js` | JavaScript | HTTP server, authentication, role checks, routes, caches, live events |
+| `store.js` | JavaScript + SQL | SQLite schema, transactions, queries, audit records |
+| `services/hazards.js` | JavaScript | Official local hazard retrieval, area geometry, proximity, sources |
+| `services/location-weather.js` | JavaScript | Census geocoding and retained optional observation/forecast adapter |
+| `public/index.html` | HTML5 | Application views and dialogs |
+| `public/app.js` | JavaScript | Client state, area search, filters, map layers, forms, role interfaces |
+| `public/styles.css` | CSS3 | Responsive styling and interaction states |
+| `public/favicon.svg` | SVG/XML | Brand icon |
+| `scripts/admin.js` | JavaScript + SQL | Promote/demote an existing account |
+| `test/` | JavaScript | Disposable integration and browser-logic tests |
+| `.github/workflows/test.yml` | YAML | GitHub Actions test workflow |
+| `render.yaml` | YAML | Unapplied hosting proposal |
+| `Dockerfile`, `compose.yaml` | Dockerfile syntax / YAML | Optional container configuration |
+| `.env.example` | Environment reference | Configuration examples; not auto-loaded |
+| `docs/` | Markdown | Usage, architecture, sources, API, design, testing, release notes |
+| `data/` | SQLite runtime files | Local account/report data; never committed |
