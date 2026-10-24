@@ -19,3 +19,9 @@ Added address-only location lookup, multi-type community filters, and NWS observ
 ## Community Interface draft
 
 Improved interface structure and reporting flow, added ownership/priority filtering, and fixed live-event batching, team availability, and cancelled/reopened response assignments. The original `main` source is preserved.
+
+## ZIP search and field-guide interface
+- Separate ZIP / ZIP+4 area lookup, preserving leading zeroes, with explicit approximate-location labels and provider error states.
+- Map-first ivory/charcoal interface, small orange identity mark, serif heading, and collapsible advanced filters.
+- Removed duplicate category dropdown and retained multi-category filters.
+- Updated API, provider, usage, design and validation documentation; 24 passing tests.

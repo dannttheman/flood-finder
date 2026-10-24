@@ -1,4 +1,4 @@
-// Government data adapters. Providers never receive account details or report text.
+// Location and government data adapters. Providers never receive account details or report text.
 const NWS = 'https://api.weather.gov';
 const CENSUS = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress';
 const text = (value, max=300) => typeof value==='string' ? value.trim().slice(0,max) : '';
@@ -23,6 +23,22 @@ export async function lookupAddress(address,fetcher=globalThis.fetch){
     const lat=numeric(match.coordinates?.y),lon=numeric(match.coordinates?.x);
     return lat!==null&&lon!==null&&validPoint(lat,lon)&&text(match.matchedAddress)?[{address:text(match.matchedAddress),lat,lon}]:[];
   });
+}
+// ZIPs identify approximate areas, never precise incident locations.
+export async function lookupArea(query,fetcher=globalThis.fetch){
+  const value=query.trim();
+  if(/^\d{5}(?:-\d{4})?$/.test(value)){
+    const zip=value.slice(0,5);
+    const response=await fetcher(`https://api.zippopotam.us/us/${zip}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)});
+    if(response.status===404)return {source:'Zippopotam.us',matches:[],kind:'postal-area'};
+    if(!response.ok)throw Error('ZIP lookup unavailable');
+    const data=await response.json(),places=Array.isArray(data.places)?data.places:[];
+    const first=places.find(place=>String(place.latitude??'').trim()!==''&&String(place.longitude??'').trim()!==''&&validPoint(Number(place.latitude),Number(place.longitude)));
+    const matches=first?[{address:`${text(first['place name'],100)}, ${text(first['state abbreviation'],10)} ${zip}`,lat:Number(first.latitude),lon:Number(first.longitude),precision:'postal-area',zip}]:[];
+    return {source:'Zippopotam.us',matches,kind:'postal-area'};
+  }
+  if(/^\d+(?:-\d*)?$/.test(value)||value.length<8)throw Object.assign(Error('Enter a five-digit U.S. ZIP, ZIP+4, or a full street address.'),{code:400});
+  return {source:'U.S. Census Bureau',kind:'street-address',matches:(await lookupAddress(value,fetcher)).map(match=>({...match,precision:'street-address'}))};
 }
 export async function getLocalWeather(lat,lon,fetcher=globalThis.fetch){
   const fetchedAt=new Date().toISOString();

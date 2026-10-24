@@ -94,3 +94,7 @@ Public report descriptions, addresses, coordinates, and operational histories ar
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+### ZIP search and restrained interface
+
+Enter a five-digit ZIP, ZIP+4, or full street address and select **Locate ↗**. ZIP results use an approximate area center from Zippopotam.us; incident reports still need a street address or precise optional pin. Advanced controls are under **Refine the map**. See [User Guide](docs/USER_GUIDE.md), [Data Sources](docs/DATA_SOURCES.md), and [Design](docs/DESIGN.md).

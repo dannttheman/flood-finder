@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { lookupAddress, getLocalWeather } from './services/location-weather.js';
+import { lookupAddress, lookupArea, getLocalWeather } from './services/location-weather.js';
 import { createHazardService } from './services/hazards.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -337,6 +337,14 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
         const responders=db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='responder'").get().n;
         const teams=db.prepare('SELECT COUNT(*) AS n FROM teams').get().n;
         return response(res,200,{byCategory,byStatus,days,responders,teams});
+      }
+      if(req.method==='GET' && path==='/api/locations') {
+        throttle(rate,`location:${ip}`,20,60000);
+        const query=field(url.searchParams.get('query'),5,250,'ZIP or address');
+        try{
+          const result=await lookupArea(query,weatherFetch);
+          return response(res,200,{...result,message:result.matches.length?'':result.kind==='postal-area'?'No location found for that ZIP. Check all five digits or try a street address.':'No street address matched. Include number, city, state, and ZIP.'});
+        }catch(error){if(error.code===400)throw error;throw err(503,'Location lookup is unavailable. Try again or move the map and choose Search this map.');}
       }
       if(req.method==='GET' && path==='/api/geocode') {
         throttle(rate,`geocode:${ip}`,20,60000);

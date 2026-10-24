@@ -11,6 +11,7 @@ All endpoints are same-origin JSON unless noted. Mutating JSON requests require 
 | `GET /api/incidents` | Public community incidents; optional category/status/severity/q/bbox filters, maximum 1,500 |
 | `GET /api/incidents/:id` | Community incident details and public update history |
 | `GET /api/stream` | Server-sent `change` events; not JSON |
+| `GET /api/locations?query=...` | ZIP / ZIP+4 area lookup or Census street lookup; returns source, kind, matches and precision |
 | `GET /api/geocode?address=...` | Census street address resolution |
 | `GET /api/hazards?lat=...&lon=...&radius=25` | Current nearby official hazard areas |
 | `GET /api/alerts` | Retained state-configured NWS alert endpoint |
@@ -84,3 +85,7 @@ No government provider API keys are currently required by the documented public 
 Provider references:
 - https://www.weather.gov/documentation/services-web-api
 - https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html
+
+## ZIP area search
+
+`GET /api/locations?query=02108` accepts five digits, ZIP+4, or a full street address. ZIP+4 resolves its five-digit area. ZIP matches include `precision: "postal-area"` and the original five-digit `zip`. A missing ZIP returns an empty matches array; malformed input is 400, provider failure 503. Requests are limited to 20 per IP per minute. ZIP lookup has an eight-second timeout and sends only the ZIP to Zippopotam.us. `/api/geocode` remains street-only for precise report placement.

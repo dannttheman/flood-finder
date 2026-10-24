@@ -24,3 +24,7 @@ There has been no exhaustive security audit, public deployment, Docker image bui
 ## This revision's verification
 
 All 21 automated tests passed locally. A live request for the default Boca Raton search returned seven nearby official coastal notices with affected-zone geometry and a live status. No fabricated incidents were inserted. Visual verification of the new layout and the remaining GitHub rename are pending because the Mac is locked; the earlier weather-dashboard screenshot does not represent this revision.
+
+## ZIP and field-guide revision — October 23, 2026
+
+All 24 automated tests passed. Added ZIP+4, leading-zero, malformed ZIP, missing ZIP, invalid coordinate, provider failure, and HTTP area-route checks. Live provider responses for 33432 and 02108 and the running `/api/locations?query=33432` endpoint were verified. Browser verification remains incomplete: the in-app browser refused the local preview connection despite a working local HTTP endpoint, and native browser automation was interrupted by user control. Do not treat the old screenshots as this design.

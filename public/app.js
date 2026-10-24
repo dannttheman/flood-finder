@@ -17,6 +17,7 @@ const selectedReportTypes=new Set();
 let reportAddressMatches=[],areaAddressMatches=[],reportLookupVersion=0,areaLookupVersion=0,hazardVersion=0;
 let searchArea={lat:26.3683,lon:-80.1289};
 let sourceFilter='all';
+let selectedAreaLabel=null;
 let myReportIds = new Set();
 async function api(path,{method='GET',body}={}) {
   const opts={method,credentials:'same-origin',headers:{'Accept':'application/json'}};
@@ -131,9 +132,9 @@ function fitReports(){
 }
 
 function filteredIncidents(){
-  const q=$('#searchFilter').value.trim().toLowerCase(),category=$('#categoryFilter').value,status=$('#statusFilter').value,severity=$('#severityFilter').value;
+  const q=$('#searchFilter').value.trim().toLowerCase(),status=$('#statusFilter').value,severity=$('#severityFilter').value;
   const onlyMine=$('#myReportsFilter').checked;
-  const items=state.incidents.filter(i=>distanceKm(i.lat,i.lon)<=searchRadius()&&(!selectedReportTypes.size||selectedReportTypes.has(i.category))&&(!category||i.category===category)&&(!status||i.status===status)&&(!severity||i.severity===severity)&&(!onlyMine||myReportIds.has(i.id))&&(!q||[i.title,i.description,i.address,i.id].some(v=>String(v||'').toLowerCase().includes(q))));
+  const items=state.incidents.filter(i=>distanceKm(i.lat,i.lon)<=searchRadius()&&(!selectedReportTypes.size||selectedReportTypes.has(i.category))&&(!status||i.status===status)&&(!severity||i.severity===severity)&&(!onlyMine||myReportIds.has(i.id))&&(!q||[i.title,i.description,i.address,i.id].some(v=>String(v||'').toLowerCase().includes(q))));
   const rank={critical:0,high:1,moderate:2,low:3};
   return items.sort((a,b)=>{
     if($('#sortFilter').value==='priority'){
@@ -148,7 +149,6 @@ function toggleReportType(type){
   if(type==='all')selectedReportTypes.clear();
   else if(selectedReportTypes.has(type))selectedReportTypes.delete(type);
   else selectedReportTypes.add(type);
-  $('#categoryFilter').value=selectedReportTypes.size===1?[...selectedReportTypes][0]:'';
   updateTypeChips();renderIncidents();
 }
 function updateTypeChips(){
@@ -177,7 +177,7 @@ async function fetchHazards(){
     const data=await api(`/api/hazards?lat=${searchArea.lat}&lon=${searchArea.lon}&radius=${searchRadius()}`);
     if(version!==hazardVersion)return;
     state.hazardMeta=data;state.hazards=data.hazards||[];
-    $('#areaName').textContent=data.location?.label||'Selected area';
+    $('#areaName').textContent=selectedAreaLabel||data.location?.label||'Selected area';
     $('#hazardStatus').textContent=(data.status==='live'?'Official feed updated ':data.status==='partial'?'Partial official coverage · ':'Official feed unavailable · ')+shortDate(data.fetchedAt);
     $('#hazardNotice').hidden=!data.message;$('#hazardNotice').textContent=data.message||'';
     renderHazards();
@@ -225,6 +225,7 @@ function useReportAddress(match){
 }
 async function findReportAddress(){
   const address=$('#reportAddress').value.trim();
+  if(/^\d{5}(?:-\d{4})?$/.test(address))throw Error('A ZIP covers a whole area. Enter a street address for this incident, or set a precise location with the optional map.');
   if(address.length<8)throw Error('Enter a full U.S. street address, or choose a location using the optional map.');
   const version=++reportLookupVersion;
   $('#reportLocationStatus').textContent='Looking up the address…';
@@ -244,17 +245,19 @@ async function findAreaAddress(e){
   e.preventDefault();const button=$('#areaSearchButton'),version=++areaLookupVersion;
   loadingButton(button,true);
   try{
-    const result=await api('/api/geocode?address='+encodeURIComponent($('#areaAddress').value.trim()));
+    const result=await api('/api/locations?query='+encodeURIComponent($('#areaAddress').value.trim()));
     if(version!==areaLookupVersion)return;
     areaAddressMatches=result.matches;
     if(result.matches.length===1)useAreaAddress(result.matches[0]);
-    else showAddressMatches('#areaAddressResults',result.matches,'area');
+    else if(result.matches.length)showAddressMatches('#areaAddressResults',result.matches,'area');
+    else $('#areaAddressResults').textContent=result.message||'No location matched. Try a ZIP or full street address.';
   }catch(error){$('#areaAddressResults').textContent=error.message;}
-  finally{loadingButton(button,false,'Find area');}
+  finally{loadingButton(button,false,'Locate ↗');}
 }
 function useAreaAddress(match){
-  searchArea={lat:match.lat,lon:match.lon};$('#areaAddress').value=match.address;$('#areaAddressResults').innerHTML='';
-  state.map?.setView([match.lat,match.lon],13);fetchHazards();
+  searchArea={lat:match.lat,lon:match.lon};selectedAreaLabel=match.address;$('#areaAddress').value=match.zip||match.address;$('#areaAddressResults').innerHTML='';
+  $('#areaPrecision').textContent=match.precision==='postal-area'?'Approximate ZIP center':'Address location';renderIncidents();
+  state.map?.setView([match.lat,match.lon],match.precision==='postal-area'?11:13);fetchHazards();
 }
 function severityPill(i){return `<span class="pill severity-${escapeHtml(i.severity)}">${escapeHtml(i.severity)}</span>`;}
 function renderIncidents(){
@@ -321,7 +324,7 @@ async function submitReport(e){
     const b=Object.fromEntries(new FormData(form).entries());b.lat=Number(b.lat);b.lon=Number(b.lon);
     if(!Number.isFinite(b.lat)||Math.abs(b.lat)>90||!Number.isFinite(b.lon)||Math.abs(b.lon)>180)throw Error('Choose a valid location.');
     const result=await api('/api/incidents',{method:'POST',body:b});closeDialog('#reportDialog');
-    searchArea={lat:result.incident.lat,lon:result.incident.lon};$('#areaAddress').value=result.incident.address||'';
+    searchArea={lat:result.incident.lat,lon:result.incident.lon};selectedAreaLabel=result.incident.address||'Report location';$('#areaPrecision').textContent='Report location';$('#areaAddress').value=result.incident.address||'';
     await fetchIncidents();fetchHazards();location.hash='#map';
     setTimeout(()=>{state.map?.setView([result.incident.lat,result.incident.lon],14);openIncident(result.incident.id);},120);
     toast('Your report is now on the map and awaiting verification.');
@@ -465,8 +468,7 @@ async function initialize(){
   $('#radiusFilter').addEventListener('change',()=>{renderIncidents();fetchHazards();});
   $('#hazardTypeFilter').addEventListener('change',renderIncidents);
   $('#areaAddress').addEventListener('input',()=>{areaLookupVersion++;areaAddressMatches=[];$('#areaAddressResults').innerHTML='';});
-  $('#searchMapArea').addEventListener('click',()=>{const point=state.map?.getCenter();if(point){searchArea={lat:point.lat,lon:point.lng};$('#areaAddress').value='';fetchHazards();}});
-  $('#categoryFilter').addEventListener('change',()=>{selectedReportTypes.clear();if($('#categoryFilter').value)selectedReportTypes.add($('#categoryFilter').value);updateTypeChips();renderIncidents();});
+  $('#searchMapArea').addEventListener('click',()=>{const point=state.map?.getCenter();if(point){searchArea={lat:point.lat,lon:point.lng};selectedAreaLabel=null;$('#areaPrecision').textContent='Map center';$('#areaAddress').value='';fetchHazards();}});
 
   $('#useLocation').addEventListener('click',()=>{
     if(!navigator.geolocation){formError('#reportError','Geolocation not supported');return;}
@@ -483,7 +485,7 @@ async function initialize(){
   $$('#refreshButton,#adminRefresh,#tasksRefresh').forEach(b=>b.addEventListener('click',refreshAll));
   $$('#statusFilter,#severityFilter,#sortFilter,#myReportsFilter').forEach(el=>el.addEventListener('change',renderIncidents));
   $('#searchFilter').addEventListener('input',()=>{clearTimeout(debounceTimer);debounceTimer=setTimeout(renderIncidents,170)});
-  $('#clearFilters').addEventListener('click',()=>{$('#searchFilter').value='';$('#hazardTypeFilter').value='';sourceFilter='all';$$('[data-source-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sourceFilter==='all')));$('#categoryFilter').value='';selectedReportTypes.clear();updateTypeChips();$('#statusFilter').value='';$('#severityFilter').value='';$('#sortFilter').value='priority';$('#myReportsFilter').checked=false;renderIncidents()});
+  $('#clearFilters').addEventListener('click',()=>{$('#searchFilter').value='';$('#hazardTypeFilter').value='';sourceFilter='all';$$('[data-source-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sourceFilter==='all')));selectedReportTypes.clear();updateTypeChips();$('#statusFilter').value='';$('#severityFilter').value='';$('#sortFilter').value='priority';$('#myReportsFilter').checked=false;renderIncidents()});
   $('#alertsToggle').addEventListener('change',renderHazards);
   $('#recenterButton').addEventListener('click',fitReports);
   $('#mobileMenu').addEventListener('click',()=>{const open=$('.nav-links').classList.toggle('open');$('#mobileMenu').setAttribute('aria-expanded',String(open));});

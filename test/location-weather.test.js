@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createApp} from '../server.js';
-import {getLocalWeather,lookupAddress} from '../services/location-weather.js';
+import {getLocalWeather,lookupAddress,lookupArea} from '../services/location-weather.js';
 const timestamp=new Date().toISOString();
 const forecast={properties:{periods:[{name:'Tonight',startTime:timestamp,endTime:new Date(Date.now()+86400000).toISOString(),temperature:76,temperatureUnit:'F',shortForecast:'Chance of rain',windSpeed:'8 mph',windDirection:'NE',probabilityOfPrecipitation:{value:40}}]}};
 const points={properties:{relativeLocation:{properties:{city:'Boca Raton',state:'FL'}},observationStations:'https://api.weather.gov/gridpoints/MFL/100,100/stations',forecast:'https://api.weather.gov/gridpoints/MFL/100,100/forecast'}};
@@ -54,4 +54,26 @@ test('linked weather URLs cannot redirect the adapter to an unrelated host',asyn
   const seen=[];
   const result=await getLocalWeather(26,-80,async url=>{seen.push(url);return {ok:true,json:async()=>({properties:{observationStations:'https://unrelated.example/stations',forecast:'https://unrelated.example/forecast'}})};});
   assert.equal(result.status,'unavailable');assert.equal(seen.length,1);
+});
+
+test('ZIP area search supports ZIP+4 and leading zeroes without street geocoding',async()=>{
+  const seen=[];
+  const zipFetch=async url=>{seen.push(String(url));return {ok:true,json:async()=>({places:[{'place name':'Boston','state abbreviation':'MA',latitude:'42.357',longitude:'-71.063'}]})};};
+  for(const value of ['02108','02108-1234']){
+    const result=await lookupArea(value,zipFetch);
+    assert.equal(result.matches[0].zip,'02108');assert.equal(result.matches[0].precision,'postal-area');assert.equal(result.matches[0].lat,42.357);
+  }
+  assert.deepEqual(seen,['https://api.zippopotam.us/us/02108','https://api.zippopotam.us/us/02108']);
+  await assert.rejects(lookupArea('1234',zipFetch),{code:400});
+});
+test('ZIP lookup exposes no-match, invalid coordinates and provider failure honestly',async()=>{
+  assert.deepEqual((await lookupArea('00000',async()=>({status:404}))).matches,[]);
+  assert.deepEqual((await lookupArea('33432',async()=>({ok:true,json:async()=>({places:[{latitude:'',longitude:''}]})}))).matches,[]);
+  await assert.rejects(lookupArea('33432',async()=>({ok:false,status:503})),/unavailable/);
+});
+test('area endpoint accepts a ZIP while precise report geocoding still requires a street address',async()=>{
+  const response=await fetch(base+'/api/locations?query=33432');assert.equal(response.status,200);
+  const result=await response.json();assert.equal(result.kind,'postal-area');
+  assert.equal((await fetch(base+'/api/geocode?address=33432')).status,400);
+  assert.equal((await fetch(base+'/api/locations?query=1234')).status,400);
 });

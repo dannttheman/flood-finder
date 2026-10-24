@@ -20,14 +20,14 @@ The original and the earlier interface draft are documented in [Versions](VERSIO
 
 ## 1. Choose your area
 
-1. Enter a full U.S. street address in **Search your area**. Include street number, street name, city, state, and preferably ZIP.
-2. Select **Find area**. A single match updates the map automatically. If several addresses match, choose the correct one.
+1. Enter a five-digit U.S. ZIP (for example `33432`), ZIP+4 (`33432-1234`), or a full street address in **ZIP code or address**. Leading zeroes are preserved.
+2. Select **Locate ↗**. A single match updates the map automatically. If several addresses match, choose the correct one.
 3. Select a search radius: 10, 25, 50, or 100 km (approximately 6, 16, 31, or 62 miles).
 4. You can also pan the map and select **Search this map** to use its current center.
 
 The dashed circle shows the search radius. Community reports are included when their coordinates are inside it. Official areas are included when their boundaries intersect the search area; the original affected boundary can extend outside the circle. Pan/zoom alone does not silently change the search center—select Search this map when ready.
 
-Address lookup uses the U.S. Census geocoder. It needs a street address, not just a business name or landmark. The entered address is sent to Census; your account details and incident description are not sent. It calculates approximate address coordinates. If lookup fails, correct the address or select an area by moving the map.
+ZIP lookup uses Zippopotam.us and centers on an approximate postal area; ZIP+4 uses the first five digits and does not locate a building. ZIPs are for browsing nearby situations, not positioning an incident report. Street-address lookup uses the U.S. Census geocoder. It needs a street address, not just a business name or landmark. The entered address is sent to Census; your account details and incident description are not sent. It calculates approximate address coordinates. If lookup fails, correct the address or select an area by moving the map.
 
 ## 2. Read the map
 
@@ -55,7 +55,7 @@ Select **All sources**, **Official**, or **Community**.
 
 For official records, choose an **Official hazard type**: flooding, severe storms, wind/dust, fire weather, winter/cold, heat, coastal/marine, or other official alerts. Fire weather describes an official weather condition, not necessarily an active fire.
 
-For community records, select one or more report-type buttons: Flooding, Roads, Power, Medical/safety, Debris, Shelter, or Other. Selected buttons are highlighted. Select a button again to remove it, or All reports to remove category restrictions. The Report type dropdown is a compact single-category alternative and replaces the button selection.
+For community records, select one or more report-type buttons: Flooding, Roads, Power, Medical/safety, Debris, Shelter, or Other. Selected buttons are highlighted. Select a button again to remove it, or All reports to remove category restrictions. Open **Refine the map** to reveal type, text, status, priority, and sorting filters.
 
 Community filters also include Status, Priority, Sort by, and Only my reports after sign-in. Priority first puts open urgent reports ahead of closed/lower-priority ones. Newest first sorts submissions by time. These community filters do not hide official areas; use the official-type or source control for those.
 

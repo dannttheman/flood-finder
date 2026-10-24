@@ -57,3 +57,7 @@ Authorized team routing uses OSRM's estimated road geometry. The public demo rou
 ## Legacy weather endpoints
 
 `/api/weather` retains the earlier station observation/forecast adapter. `/api/alerts` retains the earlier state-configured alert feed. They are documented for compatibility; the main map uses `/api/hazards` and does not display a weather dashboard. The legacy data must not be confused with official mapped incident detection.
+
+## ZIP-area lookup: Zippopotam.us
+
+Endpoint: `https://api.zippopotam.us/us/{zip}`. Public provider documentation: https://www.zippopotam.us/. The first valid place supplies an approximate postal-area center, not a property or guaranteed ZIP boundary. ZIP+4 uses its first five digits; leading zeroes remain strings. Only the ZIP is transmitted to this provider, with no account or report text. No API key is required. Missing ZIPs, invalid coordinates, timeouts and outages are surfaced rather than inventing a location. Live 33432 and 02108 responses were checked on October 23, 2026. Provider availability and coverage are not guaranteed.
