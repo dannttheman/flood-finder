@@ -25,6 +25,13 @@ Both PRs remain drafts. They are alternative complete versions; do not merge bot
 
 ## Setup verification — October 24, 2026
 
-The project creation flow was configured with the correct name and an import query for the repository's two open PRs. GitHub displayed “2 items and their sub-issues will be added.” On resuming, Chrome displayed the correctly named project at the URL above. Labels, assignments, issue #4 and contribution-document commits were separately verified through the GitHub connector.
+Verified in the GitHub browser UI:
 
-Final board-content verification, addition of issue #4 to the project, and a project overview remain pending: browser automation could read the project title but not the page controls after the Mac was unlocked. Do not treat the import count shown before creation as final verification of the board's contents. No public visibility change or deployment was made.
+- The project appears under @dannttheman's profile as **Flood Finder — Congressional App Challenge**, Private.
+- **Todo** contains draft PR #2 (current Local Hazard Map) and draft PR #3 (earlier Community Interface).
+- **In Progress** contains issue #4 (contribution evidence and release checklist), added after the initial PR import.
+- **Done** has no items; no pending review or release work is represented as complete.
+- Saved short description and project README link both drafts, checklist, specific contribution record and documentation index. The overview explains Daniel's direction, AI assistance, original/third-party attribution, 28-test implementation validation and pending acceptance/publication.
+- PR labels and assignments were verified through the GitHub connector.
+
+The earlier browser-control limitation was resolved after the user left Chrome open. All three board items and the rendered saved overview were inspected. No public visibility change, repository transfer, merge or deployment was made.
