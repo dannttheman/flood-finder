@@ -2,6 +2,7 @@
 
 | Document | Purpose |
 |---|---|
+| [Personal project](PROJECT.md) | Profile project, repository items, labels, assignments and setup verification |
 | [Contributions](CONTRIBUTIONS.md) | Daniel's product decisions, issue reports and direction; evidence links; original/AI/third-party attribution |
 | [User guide](USER_GUIDE.md) | Search, ZIPs, address suggestions, map, filters, reports and roles |
 | [Architecture](ARCHITECTURE.md) | Languages, runtime, code structure and data flow |
