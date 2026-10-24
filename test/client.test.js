@@ -32,7 +32,7 @@ async function browserHarness(){
       return {ok:true,json:async()=>path.startsWith('/api/geocode?')?{matches:[{address:'201 W PALMETTO PARK RD, BOCA RATON, FL 33432',lat:26.35,lon:-80.09}]}:responses[path]};
     }
   });
-  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={initialize,filteredIncidents,toggleReportType,ensureReportLocation,clearReportLocation,filteredHazards,setSourceFilter,state};',context);
+  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={initialize,filteredIncidents,toggleReportType,ensureReportLocation,clearReportLocation,filteredHazards,setSourceFilter,state,reportResource};',context);
   await context.driver.initialize();
   return {driver:context.driver,node,requests,get events(){return events;}};
 }
@@ -89,4 +89,14 @@ test('source filters keep official areas separate from community reports and rej
   browser.driver.setSourceFilter('official');assert.equal(browser.driver.state.filtered.length,0);assert.equal(browser.driver.filteredHazards().length,1);
   browser.driver.setSourceFilter('community');assert.equal(browser.driver.filteredHazards().length,0);assert.equal(browser.driver.state.filtered.length,3);
   browser.driver.setSourceFilter('all');browser.node('#hazardTypeFilter').value='winter';assert.equal(browser.driver.filteredHazards().length,0);
+});
+
+test('report resource links use category-specific trusted sources and a useful fallback',async()=>{
+  const {driver}=await browserHarness();
+  assert.match(driver.reportResource('flood'),/https:\/\/www.weather.gov\/safety\/flood/);
+  assert.match(driver.reportResource('power'),/redcross.org.*power-outage.html/);
+  assert.match(driver.reportResource('shelter'),/find-an-open-shelter.html/);
+  assert.match(driver.reportResource('unknown'),/redcross.org/);
+  assert.match(driver.reportResource('unknown',true),/weather.gov\/safety\//);
+  assert.match(driver.reportResource('flood'),/rel="noopener noreferrer"/);
 });

@@ -61,3 +61,15 @@ Authorized team routing uses OSRM's estimated road geometry. The public demo rou
 ## ZIP-area lookup: Zippopotam.us
 
 Endpoint: `https://api.zippopotam.us/us/{zip}`. Public provider documentation: https://www.zippopotam.us/. The first valid place supplies an approximate postal-area center, not a property or guaranteed ZIP boundary. ZIP+4 uses its first five digits; leading zeroes remain strings. Only the ZIP is transmitted to this provider, with no account or report text. No API key is required. Missing ZIPs, invalid coordinates, timeouts and outages are surfaced rather than inventing a location. Live 33432 and 02108 responses were checked on October 23, 2026. Provider availability and coverage are not guaranteed.
+
+## Photon / OpenStreetMap address suggestions
+
+- Open-source service: https://github.com/komoot/photon (Apache-2.0). API documentation: https://github.com/komoot/photon/blob/master/docs/api-v1.md.
+- Public endpoint: `https://photon.komoot.io/api/`, U.S. country filter, English, six results. Only typed address fragments are sent, after a pause. No account/report content is included.
+- Public demo server permits reasonable use, may throttle/block extensive use and offers no availability guarantee. Before public-scale deployment use a contracted geocoder or self-host Photon. Do not deploy this public endpoint assumption without revisiting capacity.
+- Coordinates are the returned OSM feature location. A named place or street center is not a building; report suggestions exclude those broad results. OSM address coverage varies. Full Census address lookup and ZIP browsing still work independently.
+- Library used for the dropdown: [Awesomplete v1.1.7](https://github.com/nudeui/awesomplete/tree/v1.1.7), MIT, vendored locally with license. The app overrides its item renderer to use textContent for untrusted provider labels.
+
+## Report resource links
+
+Curated links in `reportResource` in `public/app.js` point to NWS safety topics and American Red Cross guidance/shelter/disaster-assistance pages. All linked destinations were opened and verified October 23, 2026. They may change later; no guarantee of a particular local shelter or outage restoration is made. Road, debris, medical/safety and other community reports use general Red Cross disaster assistance, not an invented local authority URL. Resource guidance is separate from the original official NWS alert URL.

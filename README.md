@@ -98,3 +98,5 @@ MIT. See [LICENSE](LICENSE).
 ### ZIP search and restrained interface
 
 Enter a five-digit ZIP, ZIP+4, or full street address and select **Locate ↗**. ZIP results use an approximate area center from Zippopotam.us; incident reports still need a street address or precise optional pin. Advanced controls are under **Refine the map**. See [User Guide](docs/USER_GUIDE.md), [Data Sources](docs/DATA_SOURCES.md), and [Design](docs/DESIGN.md).
+
+Address fields now offer Photon/OpenStreetMap suggestions as you type, using the MIT-licensed Awesomplete library sourced from GitHub. Fonts use a single native sans-serif family. Report details include category-specific external resources. See [Third-party sources](docs/THIRD_PARTY.md) for reuse, licenses and service limits.

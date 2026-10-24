@@ -89,3 +89,7 @@ Provider references:
 ## ZIP area search
 
 `GET /api/locations?query=02108` accepts five digits, ZIP+4, or a full street address. ZIP+4 resolves its five-digit area. ZIP matches include `precision: "postal-area"` and the original five-digit `zip`. A missing ZIP returns an empty matches array; malformed input is 400, provider failure 503. Requests are limited to 20 per IP per minute. ZIP lookup has an eight-second timeout and sends only the ZIP to Zippopotam.us. `/api/geocode` remains street-only for precise report placement.
+
+## Address suggestions
+
+`GET /api/location-suggestions?query=201%20West%20Palmetto` accepts 4–180 characters. Returns `{source, matches:[{address,lat,lon,precision,source}]}` from Photon restricted to the U.S.; six results maximum. Precision is street-address when a number and street are available, otherwise place. Numeric ZIP queries return no autocomplete matches (use `/api/locations`). Invalid query: 400; provider unavailable: 503; rate limit: 429. Client debounce 650ms; 60 requests/IP/minute; global upstream gate one new query/second; duplicate in-flight queries coalesced. In-memory five-minute cache capped at 100 queries. No account data is sent upstream. Full-address and ZIP endpoints remain independent fallback paths.

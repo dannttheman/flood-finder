@@ -77,3 +77,10 @@ test('area endpoint accepts a ZIP while precise report geocoding still requires 
   assert.equal((await fetch(base+'/api/geocode?address=33432')).status,400);
   assert.equal((await fetch(base+'/api/locations?query=1234')).status,400);
 });
+
+test('suggestions route validates query and serves the pinned local library',async()=>{
+  assert.equal((await fetch(base+'/api/location-suggestions?query=abc')).status,400);
+  const numeric=await fetch(base+'/api/location-suggestions?query=33432');assert.equal(numeric.status,200);assert.deepEqual((await numeric.json()).matches,[]);
+  const result=await fetch(base+'/api/location-suggestions?query=201%20palmetto');assert.equal(result.status,200);assert.deepEqual((await result.json()).matches,[]);
+  const vendor=await fetch(base+'/vendor/awesomplete.js');assert.equal(vendor.status,200);assert.match(await vendor.text(),/MIT license/);
+});

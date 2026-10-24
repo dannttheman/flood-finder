@@ -137,3 +137,11 @@ Completing the assignment resolves the incident. Skipped/backward progress and c
 ## Scope
 
 Flood Finder is an experimental local awareness and coordination tool. It is not an emergency service, evacuation authority, flood-depth sensor, or universal disaster detector. For immediate danger, contact local emergency services. Never drive through floodwater or treat this map or estimated routes as proof of safety.
+
+## Address suggestions and resources
+
+Start typing at least four characters in either address field. After a short pause, address suggestions appear. Select with a click/tap, or use the up/down arrows and Enter. Escape dismisses suggestions. Choosing an area suggestion moves the map immediately. Choosing an incident address sets its coordinates; editing the text clears those coordinates to prevent a report using an old location. Incident suggestions require a building/street-number address; broad city or street results can only locate the browsing map. Full-address Census lookup remains available through Locate / Find address if suggestions are unavailable. ZIPs retain their separate area lookup.
+
+Typed address fragments are sent through this server to Photon / OpenStreetMap for suggestions, without account or report text. Suggestions are not Google Maps and coverage can differ. Public Photon service availability is not guaranteed.
+
+Open a report or official alert and select **View resources** at the bottom. The source name appears below the link. Flood, storm, wind, fire-weather, cold, heat and coastal alerts link to NWS topic pages; power and shelter reports link to American Red Cross pages. Other community report types link to Red Cross disaster assistance. These are guidance/resources, not evidence that a community report is verified or a local service is available. Official alert records also retain their original alert source link.

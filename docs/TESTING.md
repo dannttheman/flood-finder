@@ -28,3 +28,7 @@ All 21 automated tests passed locally. A live request for the default Boca Raton
 ## ZIP and field-guide revision — October 23, 2026
 
 All 24 automated tests passed. Added ZIP+4, leading-zero, malformed ZIP, missing ZIP, invalid coordinate, provider failure, and HTTP area-route checks. Live provider responses for 33432 and 02108 and the running `/api/locations?query=33432` endpoint were verified. Browser verification remains incomplete: the in-app browser refused the local preview connection despite a working local HTTP endpoint, and native browser automation was interrupted by user control. Do not treat the old screenshots as this design.
+
+## Address suggestions, fonts and resource links — October 23, 2026
+
+All 28 automated tests pass, including provider parsing, foreign/invalid result filtering, duplicate removal, upstream failure, HTTP validation, pinned library serving and resource-source selection. Live Photon lookup returned Boca Raton City Hall with street-address coordinates. Browser verification at 127.0.0.1:3002 confirmed the sans-serif design, a visible address suggestion and keyboard Down/Enter selection populating the full address and moving the map. All curated resource destinations were opened through web verification; no dead placeholder or hash links are used for View resources.

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { suggestAddresses } from './services/address-suggestions.js';
 import { lookupAddress, lookupArea, getLocalWeather } from './services/location-weather.js';
 import { createHazardService } from './services/hazards.js';
 import { readFile } from 'node:fs/promises';
@@ -96,13 +97,14 @@ function parseCoords(body, latKey='lat', lonKey='lon') {
   return {lat,lon};
 }
 function readIncident(db, ident) { return db.prepare(INCIDENT_SELECT+' WHERE i.id=?').get(ident); }
-const staticFiles = new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/styles.css','styles.css'],['/favicon.svg','favicon.svg']]);
+const staticFiles = new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/styles.css','styles.css'],['/favicon.svg','favicon.svg'],['/vendor/awesomplete.js','vendor/awesomplete.js']]);
 const contentTypes = {html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',svg:'image/svg+xml'};
 
 export function createApp({databasePath=process.env.DATABASE_PATH || './data/flood-finder.sqlite', weatherFetch=globalThis.fetch}={}) {
   const db = connect(databasePath);
   const rate=new Map(); const streams=new Set();
   let weatherCache={expires:0, result:null};
+  const suggestionCache=new Map(),suggestionRequests=new Map();let nextSuggestionAt=0;
   const locationCache=new Map(),weatherRequests=new Map();
   const hazardCache=new Map(),hazardRequests=new Map(),getHazards=createHazardService(weatherFetch);
   const broadcast = message => { for (const stream of streams) { try {stream.write(`event: change\ndata: ${JSON.stringify(message)}\n\n`);}catch{streams.delete(stream);} } };
@@ -337,6 +339,26 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
         const responders=db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='responder'").get().n;
         const teams=db.prepare('SELECT COUNT(*) AS n FROM teams').get().n;
         return response(res,200,{byCategory,byStatus,days,responders,teams});
+      }
+      if(req.method==='GET' && path==='/api/location-suggestions') {
+        throttle(rate,`suggestions:${ip}`,60,60000);
+        const query=field(url.searchParams.get('query'),4,180,'Address');
+        if(/^\d+(?:-\d*)?$/.test(query))return response(res,200,{matches:[],source:'Photon / OpenStreetMap'});
+        const key=query.toLowerCase(),cached=suggestionCache.get(key);
+        if(cached&&cached.expires>Date.now())return response(res,200,cached.result);
+        try{
+          if(!suggestionRequests.has(key)){
+            if(Date.now()<nextSuggestionAt)throw err(429,'Please pause before requesting more address suggestions.');
+            nextSuggestionAt=Date.now()+1000;
+            suggestionRequests.set(key,suggestAddresses(query,weatherFetch).then(matches=>{
+              const result={matches,source:'Photon / OpenStreetMap'};
+              suggestionCache.set(key,{result,expires:Date.now()+5*60000});
+              if(suggestionCache.size>100)suggestionCache.delete(suggestionCache.keys().next().value);
+              return result;
+            }).finally(()=>suggestionRequests.delete(key)));
+          }
+          return response(res,200,await suggestionRequests.get(key));
+        }catch(error){if(error.code===429)throw error;throw err(503,'Suggestions unavailable. Enter a full address and use Locate or Find address.');}
       }
       if(req.method==='GET' && path==='/api/locations') {
         throttle(rate,`location:${ip}`,20,60000);

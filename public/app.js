@@ -202,9 +202,65 @@ function renderHazardAreas(){
   if(state.searchCircle)state.map.removeLayer(state.searchCircle);
   state.searchCircle=L.circle([searchArea.lat,searchArea.lon],{radius:searchRadius()*1000,color:'#536f85',weight:1,dashArray:'5 6',fill:false,interactive:false}).addTo(state.map);
 }
+
+function reportResource(category,official=false){
+  const links={
+    flood:['https://www.weather.gov/safety/flood','NWS · Flood safety'],
+    storm:['https://www.weather.gov/safety/thunderstorm','NWS · Storm safety'],
+    wind:['https://www.weather.gov/safety/wind','NWS · Wind safety'],
+    fire:['https://www.weather.gov/safety/wildfire','NWS · Wildfire safety'],
+    winter:['https://www.weather.gov/safety/cold','NWS · Cold weather safety'],
+    heat:['https://www.weather.gov/safety/heat','NWS · Heat safety'],
+    marine:['https://www.weather.gov/safety/ripcurrent','NWS · Surf and rip currents'],
+    power:['https://www.redcross.org/get-help/how-to-prepare-for-emergencies/types-of-emergencies/power-outage.html','American Red Cross · Power outages'],
+    shelter:['https://www.redcross.org/get-help/disaster-relief-and-recovery-services/find-an-open-shelter.html','American Red Cross · Find shelter']
+  };
+  const [url,label]=links[category]||(official?['https://www.weather.gov/safety/','NWS · Safety resources']:['https://www.redcross.org/get-help/disaster-relief-and-recovery-services.html','American Red Cross · Disaster assistance']);
+  return `<a class="resource-link" href="${url}" target="_blank" rel="noopener noreferrer"><span>View resources<small>${label}</small></span><span aria-hidden="true">↗</span></a>`;
+}
+function setupAddressAutocomplete(kind){
+  if(typeof Awesomplete==='undefined')return;
+  const input=$('#'+kind+'Address'),status=$('#'+kind+'AddressResults');
+  // Override the library's HTML renderer: provider labels are always text nodes.
+  const widget=new Awesomplete(input,{minChars:4,maxItems:6,sort:false,autoFirst:false,filter:()=>true,
+    item:function(text,value,index){const li=document.createElement('li');li.textContent=text.label;li.setAttribute('role','option');li.setAttribute('aria-selected','false');li.id=`awesomplete_list_${this.count}_item_${index}`;return li;}});
+  let timer,version=0,matches=[],composing=false;
+  function cancel(){clearTimeout(timer);version++;matches=[];widget.list=[];widget.close();input.removeAttribute('aria-busy');}
+  function changed(){
+    cancel();status.textContent='';const query=input.value.trim();
+    if(composing||query.length<4||/^\d+(?:-\d*)?$/.test(query))return;
+    const current=version;
+    timer=setTimeout(async()=>{
+      if(current!==version)return;
+      status.textContent='Finding addresses…';input.setAttribute('aria-busy','true');
+      try{
+        const data=await api('/api/location-suggestions?query='+encodeURIComponent(query));
+        if(current!==version||input.value.trim()!==query)return;
+        matches=kind==='report'?data.matches.filter(match=>match.precision==='street-address'):data.matches;
+        widget.list=matches.map((match,index)=>({label:match.address,value:String(index)}));
+        status.textContent=matches.length?'Use ↑ / ↓ and Enter, or select an address.':'No suggestions. Add city and state, or enter the full address and use '+(kind==='area'?'Locate.':'Find address.');
+      }catch(error){if(current===version)status.textContent=error.message;}
+      finally{if(current===version)input.removeAttribute('aria-busy');}
+    },650);
+  }
+  input.addEventListener('input',changed);
+  input.addEventListener('compositionstart',()=>{composing=true;cancel();});
+  input.addEventListener('compositionend',()=>{composing=false;changed();});
+  input.addEventListener('awesomplete-selectcomplete',event=>{
+    const match=matches[Number(event.text.value)];if(!match)return;
+    cancel();status.textContent='';
+    if(kind==='report'){reportLookupVersion++;reportAddressMatches=[];useReportAddress(match);$('#reportLocationStatus').textContent='Suggested address selected. Check the location before publishing.';}
+    else{areaLookupVersion++;areaAddressMatches=[];useAreaAddress(match);}
+  });
+  input.addEventListener('keydown',event=>{if(event.key==='Escape'){cancel();status.textContent='';}});
+  input.form?.addEventListener('submit',cancel);
+  // Leaving the field cannot reopen a stale dropdown or keep a queued request alive.
+  input.addEventListener('blur',()=>{cancel();});
+}
+
 function openHazard(ident){
   const hazard=state.hazards.find(item=>item.id===ident);if(!hazard)return;
-  $('#hazardDetailContent').innerHTML=`<p class="source-label official-source">OFFICIAL · NATIONAL WEATHER SERVICE</p><h2 id="hazardHeading">${escapeHtml(hazard.event)}</h2><p><span class="status-tag">${escapeHtml(hazard.severity)} · ${escapeHtml(hazard.certainty)}</span></p><p class="detail-body">${escapeHtml(hazard.headline)}</p><p class="hazard-location-note">${escapeHtml(hazard.locationNote)}</p><div class="detail-grid"><div class="detail-cell"><small>AFFECTED AREA</small><strong>${escapeHtml(hazard.area)}</strong></div><div class="detail-cell"><small>EXPIRES</small><strong>${escapeHtml(shortDate(hazard.expires))}</strong></div></div><h3>Official description</h3><p class="detail-body">${escapeHtml(hazard.description||'No additional description supplied.')}</p><h3>Instructions from the issuer</h3><p class="detail-body">${escapeHtml(hazard.instruction||'No additional instructions supplied. Check the official source.')}</p><a class="button button-outline" href="${escapeHtml(hazard.url)}" target="_blank" rel="noopener noreferrer">Open official alert</a>${hazard.geometry?'<button class="button button-outline" id="showHazardArea">Show affected area</button>':''}`;
+  $('#hazardDetailContent').innerHTML=`<p class="source-label official-source">OFFICIAL · NATIONAL WEATHER SERVICE</p><h2 id="hazardHeading">${escapeHtml(hazard.event)}</h2><p><span class="status-tag">${escapeHtml(hazard.severity)} · ${escapeHtml(hazard.certainty)}</span></p><p class="detail-body">${escapeHtml(hazard.headline)}</p><p class="hazard-location-note">${escapeHtml(hazard.locationNote)}</p><div class="detail-grid"><div class="detail-cell"><small>AFFECTED AREA</small><strong>${escapeHtml(hazard.area)}</strong></div><div class="detail-cell"><small>EXPIRES</small><strong>${escapeHtml(shortDate(hazard.expires))}</strong></div></div><h3>Official description</h3><p class="detail-body">${escapeHtml(hazard.description||'No additional description supplied.')}</p><h3>Instructions from the issuer</h3><p class="detail-body">${escapeHtml(hazard.instruction||'No additional instructions supplied. Check the official source.')}</p><a class="button button-outline" href="${escapeHtml(hazard.url)}" target="_blank" rel="noopener noreferrer">Open official alert</a>${hazard.geometry?'<button class="button button-outline" id="showHazardArea">Show affected area</button>':''}${reportResource(hazard.category,true)}`;
   if(hazard.geometry)$('#showHazardArea').addEventListener('click',()=>{closeDialog('#hazardDialog');location.hash='#map';if(state.map){const bounds=L.geoJSON(hazard.geometry).getBounds();if(bounds.isValid())state.map.fitBounds(bounds,{padding:[40,50],maxZoom:12});}});
   openDialog('#hazardDialog');
 }
@@ -256,7 +312,7 @@ async function findAreaAddress(e){
 }
 function useAreaAddress(match){
   searchArea={lat:match.lat,lon:match.lon};selectedAreaLabel=match.address;$('#areaAddress').value=match.zip||match.address;$('#areaAddressResults').innerHTML='';
-  $('#areaPrecision').textContent=match.precision==='postal-area'?'Approximate ZIP center':'Address location';renderIncidents();
+  $('#areaPrecision').textContent=match.precision==='postal-area'?'Approximate ZIP center':match.precision==='place'?'Place location · approximate':'Address location';renderIncidents();
   state.map?.setView([match.lat,match.lon],match.precision==='postal-area'?11:13);fetchHazards();
 }
 function severityPill(i){return `<span class="pill severity-${escapeHtml(i.severity)}">${escapeHtml(i.severity)}</span>`;}
@@ -344,7 +400,7 @@ async function openIncident(ident){
     <div class="detail-grid"><div class="detail-cell"><small>LOCATION</small><strong>${escapeHtml(i.address||'Coordinates pinned by reporter')}</strong></div><div class="detail-cell"><small>COORDINATES</small><strong>${formatCoordinate(i.lat)}, ${formatCoordinate(i.lon)}</strong></div><div class="detail-cell"><small>FIRST REPORTED</small><strong>${shortDate(i.created_at)}</strong></div><div class="detail-cell"><small>ASSIGNED TEAM</small><strong>${escapeHtml(i.team_name||'Not assigned')}</strong></div></div>
     <div class="detail-actions"><button type="button" class="button button-outline" id="centerIncident">⌖ Show on map</button><a class="button button-outline" href="${navigate}" rel="noopener noreferrer" target="_blank">↗ Open navigation</a><button type="button" class="button button-outline" id="copyCoordinates">Copy coordinates</button></div>
     ${admin?`<div class="admin-edit"><div class="detail-section-heading">COMMAND CENTER · REVIEW & DISPATCH</div><form id="incidentAdminForm"><div class="form-row"><label>Review status<select name="status">${['reported','verified','dispatched','in_progress','resolved','rejected'].map(s=>`<option value="${s}" ${s===i.status?'selected':''}>${escapeHtml(statusLabel(s))}</option>`).join('')}</select></label><label>Priority<select name="severity">${['low','moderate','high','critical'].map(s=>`<option value="${s}" ${s===i.severity?'selected':''}>${s}</option>`).join('')}</select></label></div><label>Assign a response team<select name="team_id"><option value="">No team assigned</option>${teamOptions}</select></label><label>Operational update (public log)<textarea name="note" maxlength="500" rows="2" placeholder="Describe verification or dispatch decision. Avoid sensitive details."></textarea></label><button class="button button-primary button-full" type="submit">Save and dispatch ↗</button><div class="form-error" id="adminIncidentError" role="alert" hidden></div></form>${i.team_id?`<button id="routeTeam" type="button" class="button button-outline button-full" style="margin-top:12px">↗ Show team-to-incident route</button>`:''}</div>`:''}
-    <div class="detail-section-heading">INCIDENT HISTORY</div><div class="updates-feed">${updates||'<div class="empty-state">No updates recorded.</div>'}</div>`;
+    <div class="detail-section-heading">INCIDENT HISTORY</div><div class="updates-feed">${updates||'<div class="empty-state">No updates recorded.</div>'}</div>${reportResource(i.category)}`;
     $('#centerIncident').addEventListener('click',()=>{closeDialog('#incidentDialog');location.hash='#map';setTimeout(()=>{state.map?.setView([i.lat,i.lon],15);},110);});
     $('#copyCoordinates').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(`${i.lat}, ${i.lon}`);toast('Coordinates copied.');}catch{toast('Clipboard unavailable.','error');}});
     if(admin){$('#incidentAdminForm').addEventListener('submit',e=>submitAdminIncident(e,i.id));$('#routeTeam')?.addEventListener('click',()=>routeTeamToIncident(i));}
@@ -468,6 +524,7 @@ async function initialize(){
   $('#radiusFilter').addEventListener('change',()=>{renderIncidents();fetchHazards();});
   $('#hazardTypeFilter').addEventListener('change',renderIncidents);
   $('#areaAddress').addEventListener('input',()=>{areaLookupVersion++;areaAddressMatches=[];$('#areaAddressResults').innerHTML='';});
+  setupAddressAutocomplete('area');setupAddressAutocomplete('report');
   $('#searchMapArea').addEventListener('click',()=>{const point=state.map?.getCenter();if(point){searchArea={lat:point.lat,lon:point.lng};selectedAreaLabel=null;$('#areaPrecision').textContent='Map center';$('#areaAddress').value='';fetchHazards();}});
 
   $('#useLocation').addEventListener('click',()=>{

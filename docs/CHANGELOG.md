@@ -25,3 +25,10 @@ Improved interface structure and reporting flow, added ownership/priority filter
 - Map-first ivory/charcoal interface, small orange identity mark, serif heading, and collapsible advanced filters.
 - Removed duplicate category dropdown and retained multi-category filters.
 - Updated API, provider, usage, design and validation documentation; 24 passing tests.
+
+## Assisted address entry and source links
+- Native system sans-serif throughout; removed serif and monospace families.
+- Reused locally vendored MIT Awesomplete v1.1.7 from GitHub for keyboard-accessible suggestions; retained license and source attribution.
+- Added U.S. Photon/OpenStreetMap address suggestion proxy, debounce, bounded cache, request coalescing, upstream pacing and fallback lookup.
+- Added category-specific View resources links in both official and community report details.
+- 28 tests pass; live suggestions and browser keyboard selection verified.

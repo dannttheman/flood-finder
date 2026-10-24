@@ -36,3 +36,7 @@ Keep this same task-first direction when hosting is selected. The current work d
 ## Field-guide interface revision
 
 Warm ivory, charcoal typography, a restrained orange map-pin mark, and a serif “Around here.” heading establish a local field-guide identity. The map carries the page; source tabs stay visible while advanced controls live inside an accessible native details disclosure, “Refine the map.” The duplicate category dropdown was removed. ZIP centers are explicitly approximate. Mobile places the map before the feed. Sites local-build guidance informed this implementation. Higgsfield mockup generation was attempted but the service required a Basic plan or higher; no generated image or mockup is claimed or used.
+
+## Sans-serif and assisted entry
+
+Replaced serif and monospace font families throughout with the native system sans-serif stack. No web-font download. Address inputs use a locally vendored Awesomplete dropdown with source attribution; the visual treatment follows existing map colors. Resource links show a specific external source under the action label.
