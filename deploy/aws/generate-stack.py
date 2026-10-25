@@ -8,7 +8,8 @@ set -euo pipefail
 exec > >(tee /var/log/flood-finder-bootstrap.log | logger -t flood-finder) 2>&1
 signal_result() { aws cloudformation signal-resource --stack-name '${AWS::StackName}' --logical-resource-id Host --unique-id host --status "$1" --region '${AWS::Region}'; }
 trap 'signal_result FAILURE' ERR
-dnf install -y docker awscli2 cronie
+command -v aws >/dev/null
+dnf install -y docker cronie
 systemctl enable --now docker crond
 mkdir -p /usr/local/lib/docker/cli-plugins /opt/flood-finder
 curl -fsSL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64 -o /tmp/docker-compose-linux-x86_64

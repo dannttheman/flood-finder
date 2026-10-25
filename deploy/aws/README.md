@@ -115,3 +115,9 @@ The script reuses the contact email from the earlier `floodfinder` stack or prom
 It checks public database readiness over valid HTTPS, the homepage, HTTP redirect, and an SSE connection before printing success. Those checks do not establish all incident workflows or backups have passed; test a report across browsers and rehearse recovery before operational reliance. On startup failure it attempts to collect SSM diagnostics and stops with resources preserved. Rerunning does not automatically repair a failed stack. State and previous DNS records are under `$HOME/.flood-finder-launch/floodfinder-live` in CloudShell; keep a separate copy for recovery.
 
 Run the mocked orchestration checks with `python deploy/aws/test_launch.py`; they create no AWS resources. A real AWS account deployment remains required to validate bootstrap, IAM, DNS, and certificates.
+
+### Resume the Amazon Linux package failure
+
+The early template attempted to install `awscli2`, which is not an available package in the observed Amazon Linux 2023 repository. The AMI already provides the AWS CLI (the host successfully sent its CloudFormation failure signal). Bootstrap now checks for that CLI and installs only Docker and cronie.
+
+When `launch.sh` finds a preserved `CREATE_FAILED` stack with this known bootstrap error, it calls `repair.py`. The repair reads the existing host user data, verifies the exact package error is present, and resumes bootstrap through SSM on that same host. Only after SSM reports success does it update the existing CloudFormation template with the corrected package step, keeping the previous parameter values. It then resumes DNS and HTTPS checks. A failed remote repair stops before changing CloudFormation or DNS. This repair is specific to the known early bootstrap failure, not a general retry for arbitrary failed deployments.

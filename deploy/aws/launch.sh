@@ -25,6 +25,7 @@ if aws cloudformation describe-stacks --stack-name "$STACK" > "$STATE_DIR/stack.
   case "$STATUS" in
     CREATE_COMPLETE|UPDATE_COMPLETE|UPDATE_ROLLBACK_COMPLETE) MODE=existing ;;
     CREATE_IN_PROGRESS) MODE=waiting ;;
+    CREATE_FAILED) MODE=repair ;;
     *) echo "Stack $STACK is $STATUS. Inspect its Events and the preserved host; this script will not delete or replace its data."; exit 1 ;;
   esac
   SAVED_DOMAIN=$(python3 -c 'import json,sys;print(next(p["ParameterValue"] for p in json.load(open(sys.argv[1]))["Stacks"][0]["Parameters"] if p["ParameterKey"]=="Domain"))' "$STATE_DIR/stack.json")
@@ -32,6 +33,11 @@ if aws cloudformation describe-stacks --stack-name "$STACK" > "$STATE_DIR/stack.
 else
   grep -q 'does not exist' "$STATE_DIR/describe-error.txt" || { cat "$STATE_DIR/describe-error.txt"; exit 1; }
   MODE=new
+fi
+
+if [ "$MODE" = repair ]; then
+  python3 "$ROOT/deploy/aws/repair.py" --stack "$STACK" --state-dir "$STATE_DIR"
+  MODE=existing
 fi
 
 # Discover a public hosted zone. DNS is updated only if public delegation matches it.

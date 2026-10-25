@@ -20,7 +20,18 @@ if name=='aws':
             print('operator@example.com');sys.exit(0)
         if os.environ.get('NEW_STACK')=='1' and not (state/'created').exists():
             print('Stack does not exist',file=sys.stderr);sys.exit(1)
-        emit({'Stacks':[{'StackStatus':'CREATE_COMPLETE','Parameters':[{'ParameterKey':'Domain','ParameterValue':'floodfinderusa.com'}], 'Outputs':[{'OutputKey':'PublicIp','OutputValue':'192.0.2.10'},{'OutputKey':'InstanceId','OutputValue':'i-test'}]}]})
+        emit({'Stacks':[{'StackStatus':('CREATE_FAILED' if os.environ.get('REPAIR')=='1' and not (state/'repaired').exists() else 'CREATE_COMPLETE'),'Parameters':[{'ParameterKey':'Domain','ParameterValue':'floodfinderusa.com'}], 'Outputs':[{'OutputKey':'PublicIp','OutputValue':'192.0.2.10'},{'OutputKey':'InstanceId','OutputValue':'i-test'}]}]})
+    elif line.startswith('cloudformation describe-stack-resource'): emit({'StackResourceDetail':{'PhysicalResourceId':'i-preserved'}})
+    elif line.startswith('ec2 describe-instance-attribute'):
+        import base64
+        source="#!/bin/bash\ntrap 'signal_result FAILURE' ERR\ndnf install -y docker awscli2 cronie\nsignal_result SUCCESS\n"
+        emit({'UserData':{'Value':base64.b64encode(source.encode()).decode()}})
+    elif line.startswith('cloudformation get-template'): emit({'TemplateBody':{'Resources':{'Host':{'UserData':'dnf install -y docker awscli2 cronie'}},'Unchanged':'retain-me'}})
+    elif line.startswith('ssm send-command'): emit({'Command':{'CommandId':'repair-test'}})
+    elif line.startswith('ssm get-command-invocation'):
+        emit({'Status':'Failed' if os.environ.get('REPAIR_FAIL')=='1' else 'Success','StandardOutputContent':'repair executed','StandardErrorContent':'test failure' if os.environ.get('REPAIR_FAIL')=='1' else ''})
+    elif line.startswith('cloudformation update-stack'): (state/'repaired').touch();emit({'StackId':'test'})
+    elif line.startswith('cloudformation wait stack-update-complete'): pass
     elif line.startswith('ec2 describe-instance-type-offerings'): print('us-east-1a')
     elif line.startswith('ecr describe-repositories'): emit({})
     elif line.startswith('ecr get-login-password'): print('fake-test-login')
@@ -67,6 +78,22 @@ class LaunchTests(unittest.TestCase):
             result=subprocess.run(['bash',str(LAUNCH)],env=env,input='\n',text=True,capture_output=True)
             files={p.name:p.read_text() for p in state.iterdir()}
             return result,files
+
+    def test_preserved_host_repair_resumes_same_stack(self):
+        result,files=self.run_script(REPAIR='1')
+        self.assertEqual(result.returncode,0,result.stderr+result.stdout)
+        self.assertIn('--instance-ids i-preserved',files['calls.txt'])
+        self.assertIn('cloudformation update-stack',files['calls.txt'])
+        self.assertNotIn('cloudformation create-stack',files['calls.txt'])
+        self.assertEqual(json.loads(files['template-repaired.json'])['Unchanged'],'retain-me')
+        self.assertNotIn('awscli2',files['template-repaired.json'])
+
+    def test_failed_repair_does_not_update_stack_or_dns(self):
+        result,files=self.run_script(REPAIR='1',REPAIR_FAIL='1')
+        self.assertNotEqual(result.returncode,0)
+        self.assertNotIn('cloudformation update-stack',files['calls.txt'])
+        self.assertNotIn('change-resource-record-sets',files['calls.txt'])
+        self.assertNotIn('SUCCESS:',result.stdout)
 
     def test_new_stack_builds_image_and_preserves_failed_resources(self):
         result,files=self.run_script(NEW_STACK='1')
