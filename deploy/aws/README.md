@@ -105,3 +105,13 @@ Do not change AZ, replace an in-use volume, or run two stacks on one data volume
 ## Maintain and validate the template
 
 `stack.json` embeds `compose.yaml` and `Caddyfile` so a host needs no Git credentials. After editing either file or bootstrap configuration, run `python deploy/aws/generate-stack.py` and commit the regenerated template. Validate with `cfn-lint deploy/aws/stack.json` (CI uses 1.58.0). Local checks do not provision AWS resources, issue a real certificate, test IAM permissions, or prove DNS/SSM/backup operations in your account.
+
+## Guided CloudShell launch for floodfinderusa.com
+
+Run `bash deploy/aws/launch.sh` from a current checkout in AWS CloudShell. This creates billable resources in `us-east-1` under stack `floodfinder-live`, builds and publishes the current source, chooses an available `t3.small` zone, and preserves a failed instance for diagnostics. It reuses an existing completed stack on repeat runs; it does not deploy code updates to that existing stack. Old failed stacks and their retained volumes/vaults are not deleted. The new stack uses a fresh database; it does not migrate prior accounts or reports.
+
+The script reuses the contact email from the earlier `floodfinder` stack or prompts for one. It updates the root domain's A record only when exactly one matching public Route 53 zone is accessible and its nameservers match public delegation. Existing apex A/AAAA/CNAME records are saved locally before replacement; unrelated records are preserved. Routed DNS policies require administrator handling. External DNS requires the displayed manual record change.
+
+It checks public database readiness over valid HTTPS, the homepage, HTTP redirect, and an SSE connection before printing success. Those checks do not establish all incident workflows or backups have passed; test a report across browsers and rehearse recovery before operational reliance. On startup failure it attempts to collect SSM diagnostics and stops with resources preserved. Rerunning does not automatically repair a failed stack. State and previous DNS records are under `$HOME/.flood-finder-launch/floodfinder-live` in CloudShell; keep a separate copy for recovery.
+
+Run the mocked orchestration checks with `python deploy/aws/test_launch.py`; they create no AWS resources. A real AWS account deployment remains required to validate bootstrap, IAM, DNS, and certificates.
