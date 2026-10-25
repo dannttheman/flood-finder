@@ -1,116 +1,85 @@
 # Flood Finder
+<img width="4000" height="1080" alt="flood finder" src="https://github.com/user-attachments/assets/767455df-18ed-4cbf-bceb-0e062e0300bd" />
 
-An operational monitoring tool for teams responsible for tracking severe-weather impacts and accounting for reported incidents. Flood Finder maps user-submitted reports alongside public weather-related hazard data, with source labels, review histories, and response assignment tracking.
+**Real community disaster reporting and response-team coordination.** A functioning web app, not a static mockup. Built with Node.js 22+, the built-in SQLite database, vanilla browser JavaScript, and Leaflet + OpenStreetMap.
 
-The **Local Hazard Map** draft combines two clearly labeled sources:
-- **Official areas:** active National Weather Service warnings, watches, advisories, and relevant statements. These are shaded regions, not invented incident pins.
-- **Community reports:** location-based submissions. New submissions remain unverified until reviewed.
+## Features
 
-Weather is supporting evidence for affected areas. The main interface is the map and situation feed, not temperature cards or a general forecast dashboard. The application does not infer a flood, road closure, outage, or fire merely from a weather reading.
+- Public landing page, interactive incident map, severity/type/status/search filters, and live counts from the database
+- Secure community account registration and login using salted Node.js `scrypt` password hashes, server-side expiring sessions, and `HttpOnly` session cookies
+- Real geolocated incident submissions, audit history, severity classifications, and report verification
+- Administrator-only incident triage, status changes, team creation, crew-lead permissions and dispatch assignment
+- Responder assignments with acknowledgment, en-route, on-scene and completed stages, available to the assigned team's signed-in lead
+- Real persistent SQLite database, transactions, foreign keys, input validation, role enforcement, HTTP security headers, basic request throttling and CSRF protection
+- Live report and assignment updates via Server-Sent Events (plus periodic polling), with real charts of persisted records
+- Official National Weather Service alerts via `api.weather.gov` (default Florida; separate from unverified reports), with geographic warning polygons when available
+- Road-route overlays via OSRM when reachable and **explicitly labeled straight-line fallback when road routing is unavailable**
+- Automated HTTP integration tests for registration, permissions, reporting, dispatch, field progress and logout
 
-## Start here
-
-- [How to use the application](docs/USER_GUIDE.md)
-- [Languages, runtime, libraries, and architecture](docs/ARCHITECTURE.md)
-- [Data sources, map boundaries, and coverage limits](docs/DATA_SOURCES.md)
-- [API endpoints](docs/API.md)
-- [File and branch organization](docs/VERSIONS.md)
-- [Design decisions and Sites guidance](docs/DESIGN.md)
-- [Testing and verification](docs/TESTING.md)
-- [Publishing plan](docs/PUBLISHING.md)
-- [Change history](docs/CHANGELOG.md)
-
-## Languages and technologies
-
-| Technology | Role |
-| --- | --- |
-| JavaScript | Browser interactions and Node.js server/provider logic; ES modules on the server |
-| HTML5 | Page structure, forms, dialogs, accessibility labels |
-| CSS3 | Responsive layout, map workspace, interface styling |
-| SQL | SQLite schema, queries, and transactions |
-| YAML | GitHub Actions, the proposed Render configuration, and Docker Compose |
-| Dockerfile syntax | Optional container setup |
-| JSON / GeoJSON | API data and geographic boundaries; data formats rather than application languages |
-| Node.js | Server runtime; tested with 24.15.0, supports >=22.13.0 and <25 |
-| SQLite | Embedded persistent database, through built-in `node:sqlite` |
-| Leaflet 1.9.4 | Browser map library, served locally from `public/vendor/leaflet` |
-| OpenStreetMap | External base-map tiles |
-
-There is no React, TypeScript, Python application server, or npm runtime dependency to install. Development scripts used to edit files are not part of the application runtime.
+**No fake incident data:** the app starts empty. Users populate it by making real reports. The landing page illustration is decorative, clearly separated from the real incident map and statistics.
 
 ## Run locally
 
-1. Install a supported Node.js version.
-2. Open this version's source folder in Terminal.
-3. Run `PORT=3002 npm start`.
-4. Open **http://localhost:3002**. The welcome page is the initial view; choose **Open incident monitoring** to open the map.
+1. Install **Node.js 22.13 or later** (the built-in `node:sqlite` module is required). No `npm install` or database account is needed.
+2. From this folder run:
+**Real community disaster reporting and response-team coordination.** Because powerful storms deserve powerful response.
 
-`npm start` alone defaults to port 3000. Use port 3002 for this draft when another local version is already running. No `npm install`, government-data API key, or separate database account is required. Internet access is needed for map assets, tiles, address lookup, and official hazard data.
+   ```sh
+   npm start
+   ```
 
-Local accounts, sessions, and community reports are saved in `data/flood-finder.sqlite`. Runtime data is ignored by Git and is not copied between the local versions. Keep the server running while using the local preview; stop it with Control+C.
+3. Open **http://localhost:3000**.
+4. Register your account using the UI. Accounts default to `resident` (this prevents arbitrary admin signup).
+5. Stop the server, promote the initial administrator, and restart:
 
-Run `npm test` for the automated checks. The tests use temporary databases and mock government responses rather than depending on live emergencies.
+   ```sh
+   npm run admin -- promote you@example.com
+   npm start
+   ```
 
-## Administrator setup
-
-Register normally in the app first. In the same source folder and with the same database setting, run:
+   You can also run the command from a second terminal while the server is running. **Sign out and sign back in** to refresh the UI. The admin command revokes old sessions.
+6. As admin, open **Command center** to create response teams and give selected accounts the `responder` role. Assign a responder account as a team lead, enter real base coordinates, and dispatch the team to an incident. Team leads see their work in **My assignments**.
 
 ```sh
-npm run admin -- promote your-registered-email@example.com
+npm test
 ```
-
-Sign in again afterward. Registration creates a resident account; it never grants administrator access. Administrators can review incidents, set roles, create teams, and assign work. Team leads use My assignments.
-
-## Current draft names
-
-- `main`: original project.
-- `community-interface`: earlier interface draft.
-- `flood-finder-v2-weather-addresses`: current map-focused draft; requested rename to `local-hazard-map` is pending browser access.
-
-Draft comparisons are alternatives for review against `main`; do not merge both without reviewing the combined result. Previous branch names and historical drafts are recorded in [Versions](docs/VERSIONS.md).
 
 ## Configuration
 
-Use `.env.example` as a reference. Node does not automatically load `.env`; use shell/provider environment variables or `node --env-file=.env server.js`.
+Copy `.env.example` as a reference. Set environment variables in your shell or hosting provider. Node does **not** automatically read `.env` files; if you want local `.env` loading with Node 22 use `node --env-file=.env server.js`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
-| `DATABASE_PATH` | `./data/flood-finder.sqlite` | Persistent SQLite file |
-| `NODE_ENV` | `development` | `production` makes session cookies HTTPS-only |
-| `TRUST_PROXY` | `0` | Only enable behind a trusted proxy that overwrites forwarded headers |
-| `NWS_USER_AGENT` | Application identifier | Set an appropriate public project contact before publishing |
-| `NWS_AREAS` | `FL` | Legacy statewide `/api/alerts` endpoint; the main local hazard map discovers the selected location's state |
-| `OSRM_URL` | Public OSRM demo endpoint | Estimated team routing; not a guaranteed production service |
+| `DATABASE_PATH` | `./data/flood-finder.sqlite` | Durable SQLite location; **mount a persistent volume in production** |
+| `NODE_ENV` | `development` | `production` sets cookies `Secure`; requires HTTPS front-end |
+| `TRUST_PROXY` | `0` | Set `1` **only** behind a trusted reverse proxy that overwrites client forwarding headers |
+| `NWS_AREAS` | `FL` | State code for official alerts (e.g. `FL`, `NC`, `TX`) |
+| `NWS_USER_AGENT` | Sample | Replace with a public contact as recommended by NWS |
+| `OSRM_URL` | `https://router.project-osrm.org` | Road route engine (demo public endpoint is not suitable for guaranteed production dispatch) |
 
-No publishing occurs as part of the current draft. See the publishing plan before choosing hosting or paying for resources. The existing Render file is a proposal, not a deployment.
+The weather alert feed and OSRM road routing require an internet connection. Base map imagery and Leaflet assets use OpenStreetMap and pinned unpkg CDN resources, respectively. All other application functionality is local and database-backed.
 
-## Scope and limitations
+## Production deployment
 
-Official hazard coverage is weather-related and limited to supported U.S. areas. This app does not automatically detect every road closure, outage, structure fire, earthquake, crime, or other emergency. Community reporting supplements that gap. Official boundaries can cover more territory than the actual hazard; local geometry matching is approximate. Missing alerts or reports are not evidence that an area is safe.
+- Deploy as a **long-lived Node server**; static-only hosts such as GitHub Pages cannot run this backend.
+- Provide **HTTPS** through a trusted reverse proxy and set `NODE_ENV=production`. Only configure `TRUST_PROXY=1` if proxy forwarding headers are cleaned and trusted.
+- Persist the database directory on an attached disk/volume, and implement **automated, tested SQLite backups**. Do not run multiple isolated containers each using its own SQLite copy; use one writer/instance or move to a shared database.
+- Host/pin your own map tiles and Leaflet assets for resiliency; respect OpenStreetMap usage policy. For real agency operations, host a supported routing service and validate road closures/evacuation information independently.
+- Configure monitoring, logs, throttling at the edge, incident-moderation processes, privacy retention, and an emergency-operations policy before advertising the system publicly.
+- Admin accounts are created by a server operator with the command shown above; there is deliberately **no public 'make me admin' button**.
 
-Public report descriptions, addresses, coordinates, and operational histories are visible to people who can access the app. Do not put private names, phone numbers, or medical details in them. For immediate danger, contact local emergency services. Estimated routes are not verified flood-safe routes.
+## Security and privacy
 
-## License
+Password hashes are salted and derived with Node's `scrypt` (`N=16384,r=8,p=1`) rather than stored as plaintext. Sessions are 256-bit random bearer tokens; only the SHA-256 digest is stored in SQLite. Sessions expire after seven days. Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` when deployed with `NODE_ENV=production`. Mutation endpoints require JSON and the non-simple `X-FloodFinder: 1` header to reduce browser CSRF risk; browsers are not given cross-origin API access. Every admin and responder write is authorized server-side.
+## Features
 
-MIT. See [LICENSE](LICENSE).
+**Community reports are public:** latitude/longitude, descriptions and any address/landmark typed by the reporter are exposed on the map. Avoid names, medical specifics, home addresses, phone numbers or other personally identifying information in reports. Account email addresses and crew contact details are restricted to authorized roles.
+Community reports are public: latitude/longitude, descriptions and any address/landmark typed by the reporter are exposed on the map. Avoid names, medical specifics, home addresses, phone numbers or other personally identifying information in reports. Account email addresses and crew contact details are restricted to authorized roles.
 
-### ZIP search and restrained interface
+## Safety and scope
 
-Enter a five-digit ZIP, ZIP+4, or full street address and select **Locate ↗**. ZIP results use an approximate area center from Zippopotam.us; incident reports still need a street address or precise optional pin. Advanced controls are under **Refine the map**. See [User Guide](docs/USER_GUIDE.md), [Data Sources](docs/DATA_SOURCES.md), and [Design](docs/DESIGN.md).
+Flood Finder is a **coordination aid**, not a 911 service, government dispatch authority, official evacuation order, automatic flood prediction system, or an alternative to NWS/municipal advisories. Public reports start `reported` and remain unverified until reviewed. Estimated route geometry from OSRM is **not verified flood-safe**. Do not use the platform as a sole source for immediate life-safety decisions. Always call local emergency services for life-threatening situations.
+Flood Finder is a **coordination aid**, not a 911 service, government dispatch authority, official evacuation order, automatic flood prediction system, or an alternative to NWS/municipal advisories. It serves as a hub for people in a community to help report incidents during hurricanes, tropical storms, or other severe weather events. Officials can take advantage of this app to track and monitor when certain incidents appear, as well as deliver informed messages to their area. The application also uses real time weather data in compound with crowdsourced information. Public reports start `reported` and remain unverified until reviewed. Estimated route geometry from OSRM is **not verified flood-safe**. Do not use the platform as a sole source for immediate life-safety decisions. Always call local emergency services for life-threatening situations.
 
-Address fields now offer Photon/OpenStreetMap suggestions as you type, using the MIT-licensed Awesomplete library sourced from GitHub. Fonts use a single native sans-serif family. Report details include category-specific external resources. See [Third-party sources](docs/THIRD_PARTY.md) for reuse, licenses and service limits.
-
-## Landing page and AWS launch foundation
-
-The welcome page introduces the map, source labels, reporting flow, FAQs, and safety limitations. About, Privacy, Responsible use, and the full guide are available in navigation and the footer. Shared report links still open their original map record.
-
-See [AWS deployment and operations](deploy/aws/README.md) for the single-instance EC2/HTTPS deployment, encrypted persistent SQLite volume, daily backups, ECR image publishing, administrator setup, recovery, and launch checklist. Infrastructure is prepared in code; it has not been deployed to an AWS account.
-
-`/api/ready` checks database availability. SIGTERM/SIGINT drain live streams and requests before closing SQLite. To create a consistent verified local backup without stopping the server:
-
-```sh
-node scripts/backup.js /path/to/a/new-backup.sqlite
-```
-
-Use the same `DATABASE_PATH` as the server. Protect backups like account data. See the AWS guide for restoration and operational limitations.
+## Project layout
