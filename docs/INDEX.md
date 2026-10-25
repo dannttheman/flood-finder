@@ -17,3 +17,5 @@
 | [Render proposal](RENDER.md) | Unapplied hosting proposal and costs/constraints |
 
 Current review: [Local Hazard Map, draft #2](https://github.com/jss-18/flood-finder/pull/2). Original code remains on main; this draft is not merged or published.
+
+- [AWS deployment, operations, and launch checklist](../deploy/aws/README.md)

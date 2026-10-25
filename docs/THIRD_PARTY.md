@@ -11,3 +11,7 @@ Photon: https://github.com/komoot/photon (Apache-2.0), used as a remote service,
 ## Leaflet
 
 Leaflet 1.9.4, https://github.com/Leaflet/Leaflet, BSD-2-Clause, loaded from unpkg. OpenStreetMap map attribution remains visible on the map.
+
+## Locally served Leaflet
+
+Leaflet 1.9.4 JavaScript, stylesheet, and marker images are vendored from the npm `leaflet@1.9.4` package under `public/vendor/leaflet`. Its BSD-2-Clause license is included there. Serving these files locally removes the runtime unpkg script dependency. OpenStreetMap tiles remain external and require attribution and compliance with their tile usage policy.

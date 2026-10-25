@@ -1,0 +1,491 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Flood Finder single-instance launch foundation: encrypted persistent SQLite, TLS proxy, daily retained backups, SSM administration. Not a multi-instance architecture.",
+  "Parameters": {
+    "AvailabilityZone": {
+      "Type": "AWS::EC2::AvailabilityZone::Name"
+    },
+    "Domain": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9]+([.-][a-z0-9]+)*\\.[a-z]{2,}"
+    },
+    "ContactEmail": {
+      "Type": "String",
+      "AllowedPattern": "[A-Za-z0-9._+%-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    },
+    "ImageUri": {
+      "Type": "String",
+      "AllowedPattern": "[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9/_.-]+@sha256:[a-f0-9]{64}",
+      "Description": "Private ECR immutable digest URI in this account and region"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t3.small",
+      "AllowedValues": [
+        "t3.small",
+        "t3.medium"
+      ]
+    },
+    "ExistingDataVolumeId": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "(vol-[a-f0-9]+)?",
+      "Description": "Optional retained/restored data volume in the selected AZ. Never attach a volume in use."
+    },
+    "Ami": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    }
+  },
+  "Conditions": {
+    "CreateData": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingDataVolumeId"
+        },
+        ""
+      ]
+    }
+  },
+  "Resources": {
+    "Network": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.42.0.0/16",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true
+      }
+    },
+    "Gateway": {
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "GatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Network"
+        },
+        "InternetGatewayId": {
+          "Ref": "Gateway"
+        }
+      }
+    },
+    "Subnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Network"
+        },
+        "CidrBlock": "10.42.1.0/24",
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone"
+        },
+        "MapPublicIpOnLaunch": true
+      }
+    },
+    "RouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Network"
+        }
+      }
+    },
+    "InternetRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "GatewayAttachment",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "Gateway"
+        }
+      }
+    },
+    "Routes": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "Subnet"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "Firewall": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Public HTTPS and certificate issuance only; administration through SSM",
+        "VpcId": {
+          "Ref": "Network"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "HostRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          },
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "SignalBootstrap",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:SignalResource",
+                  "Resource": {
+                    "Ref": "AWS::StackId"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "HostProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "HostRole"
+          }
+        ]
+      }
+    },
+    "Data": {
+      "Type": "AWS::EC2::Volume",
+      "Condition": "CreateData",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone"
+        },
+        "Encrypted": true,
+        "Size": 20,
+        "VolumeType": "gp3",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-data"
+            }
+          }
+        ]
+      }
+    },
+    "Host": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": [
+        "InternetRoute",
+        "Routes"
+      ],
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Count": 1,
+          "Timeout": "PT20M"
+        }
+      },
+      "Properties": {
+        "ImageId": {
+          "Ref": "Ami"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "SubnetId": {
+          "Ref": "Subnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "Firewall"
+          }
+        ],
+        "IamInstanceProfile": {
+          "Ref": "HostProfile"
+        },
+        "Volumes": [
+          {
+            "Device": "/dev/sdf",
+            "VolumeId": {
+              "Fn::If": [
+                "CreateData",
+                {
+                  "Ref": "Data"
+                },
+                {
+                  "Ref": "ExistingDataVolumeId"
+                }
+              ]
+            }
+          }
+        ],
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 1
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 16,
+              "VolumeType": "gp3",
+              "Encrypted": true
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-app"
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Sub": [
+              "#!/bin/bash\nset -euo pipefail\nexec > >(tee /var/log/flood-finder-bootstrap.log | logger -t flood-finder) 2>&1\nsignal_result() { aws cloudformation signal-resource --stack-name '${AWS::StackName}' --logical-resource-id Host --unique-id host --status \"$1\" --region '${AWS::Region}'; }\ntrap 'signal_result FAILURE' ERR\ndnf install -y docker awscli2 cronie\nsystemctl enable --now docker crond\nmkdir -p /usr/local/lib/docker/cli-plugins /opt/flood-finder\ncurl -fsSL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64 -o /tmp/docker-compose-linux-x86_64\ncurl -fsSL https://github.com/docker/compose/releases/download/v2.40.3/checksums.txt -o /tmp/compose-checksums.txt\n(cd /tmp && grep ' [*]docker-compose-linux-x86_64$' compose-checksums.txt | sha256sum -c -)\ninstall -m 0755 /tmp/docker-compose-linux-x86_64 /usr/local/lib/docker/cli-plugins/docker-compose\nVOLUME_ID='${DataId}'\nDEVICE=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$(echo \"$VOLUME_ID\" | tr -d '-')\nfor attempt in $(seq 1 120); do\n  if [ -b \"$DEVICE\" ]; then break; fi\n  if [ -b /dev/xvdf ]; then DEVICE=/dev/xvdf; break; fi\n  sleep 2\ndone\ntest -b \"$DEVICE\"\nif ! blkid \"$DEVICE\"; then mkfs.ext4 \"$DEVICE\"; fi\nmkdir -p /srv/flood-finder\nUUID=$(blkid -s UUID -o value \"$DEVICE\")\necho \"UUID=$UUID /srv/flood-finder ext4 defaults 0 2\" >> /etc/fstab\nmount /srv/flood-finder\nmkdir -p /srv/flood-finder/data /srv/flood-finder/backups\nchown 1000:1000 /srv/flood-finder/data /srv/flood-finder/backups\nchmod 700 /srv/flood-finder/data /srv/flood-finder/backups\necho 'c2VydmljZXM6CiAgYXBwOgogICAgaW1hZ2U6ICR7QVBQX0lNQUdFOj9TZXQgQVBQX0lNQUdFIHRvIHRoZSBpbW11dGFibGUgRUNSIGltYWdlIFVSSX0KICAgIHJlc3RhcnQ6IHVubGVzcy1zdG9wcGVkCiAgICBpbml0OiB0cnVlCiAgICBzdG9wX2dyYWNlX3BlcmlvZDogMjBzCiAgICByZWFkX29ubHk6IHRydWUKICAgIHRtcGZzOgogICAgICAtIC90bXA6c2l6ZT0zMm0sbW9kZT0xNzc3CiAgICBjYXBfZHJvcDogW0FMTF0KICAgIHNlY3VyaXR5X29wdDogW25vLW5ldy1wcml2aWxlZ2VzOnRydWVdCiAgICBlbnZpcm9ubWVudDoKICAgICAgTk9ERV9FTlY6IHByb2R1Y3Rpb24KICAgICAgVFJVU1RfUFJPWFk6ICcxJwogICAgICBEQVRBQkFTRV9QQVRIOiAvYXBwL2RhdGEvZmxvb2QtZmluZGVyLnNxbGl0ZQogICAgICBOV1NfVVNFUl9BR0VOVDogJHtOV1NfVVNFUl9BR0VOVDo/U2V0IGEgcmVhbCBwdWJsaWMgcHJvamVjdCBjb250YWN0fQogICAgdm9sdW1lczoKICAgICAgLSAvc3J2L2Zsb29kLWZpbmRlci9kYXRhOi9hcHAvZGF0YQogICAgZXhwb3NlOiBbJzMwMDAnXQogICAgbWVtX2xpbWl0OiA3NjhtCiAgICBsb2dnaW5nOgogICAgICBkcml2ZXI6IGpzb24tZmlsZQogICAgICBvcHRpb25zOiB7bWF4LXNpemU6IDEwbSwgbWF4LWZpbGU6ICczJ30KICBlZGdlOgogICAgaW1hZ2U6IGNhZGR5OjIuMTAuMi1hbHBpbmUKICAgIHJlc3RhcnQ6IHVubGVzcy1zdG9wcGVkCiAgICBwb3J0czogWyc4MDo4MCcsICc0NDM6NDQzJ10KICAgIGVudmlyb25tZW50OgogICAgICBET01BSU46ICR7RE9NQUlOOj9TZXQgRE9NQUlOfQogICAgICBBQ01FX0VNQUlMOiAke0FDTUVfRU1BSUw6P1NldCBjZXJ0aWZpY2F0ZSBjb250YWN0fQogICAgdm9sdW1lczoKICAgICAgLSAuL0NhZGR5ZmlsZTovZXRjL2NhZGR5L0NhZGR5ZmlsZTpybwogICAgICAtIC9zcnYvZmxvb2QtZmluZGVyL2NhZGR5LWRhdGE6L2RhdGEKICAgICAgLSAvc3J2L2Zsb29kLWZpbmRlci9jYWRkeS1jb25maWc6L2NvbmZpZwogICAgZGVwZW5kc19vbjoKICAgICAgYXBwOiB7Y29uZGl0aW9uOiBzZXJ2aWNlX2hlYWx0aHl9CiAgICBsb2dnaW5nOgogICAgICBkcml2ZXI6IGpzb24tZmlsZQogICAgICBvcHRpb25zOiB7bWF4LXNpemU6IDEwbSwgbWF4LWZpbGU6ICczJ30K' | base64 -d > /opt/flood-finder/compose.yaml\necho 'ewogIGVtYWlsIHskQUNNRV9FTUFJTH0KfQp7JERPTUFJTn0gewogIGVuY29kZSB6c3RkIGd6aXAKICByZXZlcnNlX3Byb3h5IGFwcDozMDAwIHsKICAgIGZsdXNoX2ludGVydmFsIC0xCiAgICAjIFJlcGxhY2UgY2xpZW50LXN1cHBsaWVkIGZvcndhcmRlZCBoZWFkZXJzOyBhcHAgdHJ1c3RzIG9ubHkgdGhpcyBwcm94eS4KICAgIGhlYWRlcl91cCBYLUZvcndhcmRlZC1Gb3Ige3JlbW90ZV9ob3N0fQogICAgaGVhZGVyX3VwIFgtRm9yd2FyZGVkLVByb3RvIHtzY2hlbWV9CiAgfQp9Cg==' | base64 -d > /opt/flood-finder/Caddyfile\ncat > /opt/flood-finder/.env <<'ENV'\nAPP_IMAGE=${ImageUri}\nDOMAIN=${Domain}\nACME_EMAIL=${ContactEmail}\nNWS_USER_AGENT=FloodFinder/3.0 (${ContactEmail})\nENV\nchmod 600 /opt/flood-finder/.env\naws ecr get-login-password --region '${AWS::Region}' | docker login --username AWS --password-stdin '${Registry}'\ncat > /etc/systemd/system/flood-finder.service <<'UNIT'\n[Unit]\nDescription=Flood Finder application and TLS proxy\nRequires=docker.service\nAfter=docker.service network-online.target\nRequiresMountsFor=/srv/flood-finder\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/flood-finder\nExecStart=/usr/bin/docker compose up -d --wait --wait-timeout 180\nExecStop=/usr/bin/docker compose stop\nTimeoutStartSec=240\nTimeoutStopSec=60\n[Install]\nWantedBy=multi-user.target\nUNIT\ncat > /usr/local/bin/flood-finder-backup <<'BACKUP'\n#!/bin/bash\nset -euo pipefail\ncd /opt/flood-finder\nstamp=$(date -u +%Y%m%dT%H%M%SZ)\ndocker compose exec -T app node scripts/backup.js \"/app/data/backup-$stamp.sqlite\"\nmv \"/srv/flood-finder/data/backup-$stamp.sqlite\" /srv/flood-finder/backups/\nfind /srv/flood-finder/backups -name 'backup-*.sqlite' -mtime +7 -delete\nBACKUP\nchmod 700 /usr/local/bin/flood-finder-backup\ncat > /etc/cron.d/flood-finder-backup <<'CRON'\n0 3 * * * root /usr/local/bin/flood-finder-backup >> /var/log/flood-finder-backup.log 2>&1\nCRON\nsystemctl daemon-reload\nsystemctl enable --now flood-finder\ncd /opt/flood-finder\ndocker compose exec -T app node -e \"fetch('http://127.0.0.1:3000/api/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\"\nsignal_result SUCCESS\n",
+              {
+                "DataId": {
+                  "Fn::If": [
+                    "CreateData",
+                    {
+                      "Ref": "Data"
+                    },
+                    {
+                      "Ref": "ExistingDataVolumeId"
+                    }
+                  ]
+                },
+                "Registry": {
+                  "Fn::Select": [
+                    0,
+                    {
+                      "Fn::Split": [
+                        "/",
+                        {
+                          "Ref": "ImageUri"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "Address": {
+      "Type": "AWS::EC2::EIP",
+      "DependsOn": "GatewayAttachment",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "AddressAttachment": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "Address",
+            "AllocationId"
+          ]
+        },
+        "InstanceId": {
+          "Ref": "Host"
+        }
+      }
+    },
+    "BackupRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "backup.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
+          }
+        ]
+      }
+    },
+    "BackupVault": {
+      "Type": "AWS::Backup::BackupVault",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BackupVaultName": {
+          "Fn::Sub": "${AWS::StackName}-data"
+        }
+      }
+    },
+    "BackupPlan": {
+      "Type": "AWS::Backup::BackupPlan",
+      "Properties": {
+        "BackupPlan": {
+          "BackupPlanName": {
+            "Fn::Sub": "${AWS::StackName}-daily"
+          },
+          "BackupPlanRule": [
+            {
+              "RuleName": "Daily",
+              "TargetBackupVault": {
+                "Ref": "BackupVault"
+              },
+              "ScheduleExpression": "cron(0 5 * * ? *)",
+              "StartWindowMinutes": 60,
+              "CompletionWindowMinutes": 180,
+              "Lifecycle": {
+                "DeleteAfterDays": 30
+              }
+            }
+          ]
+        }
+      }
+    },
+    "BackupSelection": {
+      "Type": "AWS::Backup::BackupSelection",
+      "Properties": {
+        "BackupPlanId": {
+          "Ref": "BackupPlan"
+        },
+        "BackupSelection": {
+          "SelectionName": "SQLiteData",
+          "IamRoleArn": {
+            "Fn::GetAtt": [
+              "BackupRole",
+              "Arn"
+            ]
+          },
+          "Resources": [
+            {
+              "Fn::Sub": [
+                "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/${Volume}",
+                {
+                  "Volume": {
+                    "Fn::If": [
+                      "CreateData",
+                      {
+                        "Ref": "Data"
+                      },
+                      {
+                        "Ref": "ExistingDataVolumeId"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "HostStatusAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "Host failure; configure SNS notifications before launch",
+        "Namespace": "AWS/EC2",
+        "MetricName": "StatusCheckFailed",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "Host"
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "breaching"
+      }
+    }
+  },
+  "Outputs": {
+    "PublicIp": {
+      "Value": {
+        "Ref": "Address"
+      },
+      "Description": "Set the domain A record to this address"
+    },
+    "Url": {
+      "Value": {
+        "Fn::Sub": "https://${Domain}"
+      }
+    },
+    "InstanceId": {
+      "Value": {
+        "Ref": "Host"
+      }
+    },
+    "DataVolumeId": {
+      "Value": {
+        "Fn::If": [
+          "CreateData",
+          {
+            "Ref": "Data"
+          },
+          {
+            "Ref": "ExistingDataVolumeId"
+          }
+        ]
+      }
+    },
+    "BackupVaultName": {
+      "Value": {
+        "Ref": "BackupVault"
+      }
+    }
+  }
+}

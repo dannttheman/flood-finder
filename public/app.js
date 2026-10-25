@@ -2,7 +2,7 @@
 'use strict';
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
-const allowedViews = ['home','map','admin','tasks','help'];
+const allowedViews = ['home','map','admin','tasks','help','about','privacy','terms'];
 const categories = {flood:'Flooding',road:'Road / access',power:'Power / utility',medical:'Medical / safety',debris:'Storm debris',shelter:'Shelter need',other:'Other'};
 const symbols={flood:'≋',road:'⛔',power:'⚡',medical:'✚',debris:'◈',shelter:'⌂',other:'!'};
 const statusLabel = s => ({in_progress:'In progress'}[s] || String(s||'').replaceAll('_',' '));
@@ -74,7 +74,7 @@ function updateAuthUI(){
   if(!u){$('#myReportsFilter').checked=false;myReportIds.clear();renderIncidents();}
 }
 function route(){
-  let target=location.hash.replace(/^#/,'')||'map';
+  let target=location.hash.replace(/^#/,'')||'home';
   if(!allowedViews.includes(target))target='home';
   if(target==='admin'&&state.user?.role!=='admin')target='map';
   if(target==='tasks'&&!['responder','admin'].includes(state.user?.role))target='map';
@@ -87,6 +87,7 @@ function route(){
     initializeMap();setTimeout(()=>{state.map?.invalidateSize();},90);
     renderIncidents();renderHazards();
   }
+  document.title = `Flood Finder | ${{home:'Local knowledge, shared clearly',map:'Local Hazard Map',about:'About',help:'How it works',privacy:'Privacy',terms:'Responsible use',admin:'Command center',tasks:'My assignments'}[target]}`;
   if(target==='admin')renderAdmin();
   if(target==='tasks')renderAssignments();
   window.scrollTo({top:0,behavior:'instant'});

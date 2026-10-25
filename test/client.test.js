@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-async function browserHarness(search=''){
+async function browserHarness(search='',hash='#home'){
   const nodes=new Map(),requests=[];
   const node=selector=>{
     if(!nodes.has(selector))nodes.set(selector,{value:'',checked:false,hidden:true,textContent:'',innerHTML:'',dataset:{},classList:{remove(){},toggle(){}},setAttribute(){},removeAttribute(){},addEventListener(){},showModal(){this.open=true;}});
@@ -18,7 +18,7 @@ async function browserHarness(search=''){
   let events;
   const context=vm.createContext({
     document:{querySelector:node,querySelectorAll:()=>[],addEventListener(){},body:{addEventListener(){}},visibilityState:'visible'},
-    location:{hash:'#home',search,pathname:'/',origin:'http://localhost'},URL,URLSearchParams,window:{scrollTo(){},addEventListener(){}},console,Date,Set,Number,String,Promise,
+    location:{hash,search,pathname:'/',origin:'http://localhost'},URL,URLSearchParams,window:{scrollTo(){},addEventListener(){}},console,Date,Set,Number,String,Promise,
     setTimeout,clearTimeout,setInterval:()=>0,navigator:{},
     EventSource:class{constructor(){events=this;this.listeners={};}addEventListener(name,fn){this.listeners[name]=fn;}},
     fetch:async path=>{
@@ -33,7 +33,7 @@ async function browserHarness(search=''){
       return {ok:true,json:async()=>path.startsWith('/api/geocode?')?{matches:[{address:'201 W PALMETTO PARK RD, BOCA RATON, FL 33432',lat:26.35,lon:-80.09}]}:responses[path]};
     }
   });
-  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={initialize,filteredIncidents,toggleReportType,ensureReportLocation,clearReportLocation,filteredHazards,setSourceFilter,state,reportResource};',context);
+  vm.runInContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8')+'\nglobalThis.driver={route,initialize,filteredIncidents,toggleReportType,ensureReportLocation,clearReportLocation,filteredHazards,setSourceFilter,state,reportResource};',context);
   await context.driver.initialize();
   return {driver:context.driver,node,requests,get events(){return events;}};
 }
@@ -112,4 +112,20 @@ test('shared community record opens its original submission and separates advice
   assert.match(html,/http:\/\/localhost\/\?incident=new#map/);
   assert.match(html,/General advice, not evidence/);
   assert.doesNotMatch(html,/Could not load incident/);
+});
+
+
+test('first visit opens landing page and informational views remain navigable',async()=>{
+  const browser=await browserHarness('', '');
+  assert.equal(browser.node('#homeView').hidden,false);
+  assert.equal(browser.node('#mapView').hidden,true);
+  assert.equal(browser.node('#privacyView').hidden,true);
+  const map=await browserHarness('', '#map');
+  assert.equal(map.node('#homeView').hidden,true);
+  assert.equal(map.node('#mapView').hidden,false);
+  for(const view of ['about','privacy','terms','help']){
+    const page=await browserHarness('', '#'+view);
+    assert.equal(page.node('#'+view+'View').hidden,false);
+    assert.equal(page.node('#homeView').hidden,true);
+  }
 });

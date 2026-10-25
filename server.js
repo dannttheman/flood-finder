@@ -61,7 +61,7 @@ function setCookie(req, res, value, maxAge) {
 const baseHeaders = {
   'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'strict-origin-when-cross-origin',
   'X-Frame-Options':'DENY', 'Permissions-Policy':'camera=(), microphone=(), geolocation=(self)',
-  'Content-Security-Policy':"default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 };
 async function bodyJSON(req) {
   if (!(req.headers['content-type']||'').toLowerCase().startsWith('application/json')) throw err(415,'Send JSON content');
@@ -84,7 +84,7 @@ function requireRole(user, roles) {
   if (!roles.includes(user.role)) throw err(403,'You do not have permission');
 }
 function ipAddress(req) {
-  return process.env.TRUST_PROXY==='1' ? text((req.headers['x-forwarded-for']||'').split(',')[0],64) || req.socket.remoteAddress : req.socket.remoteAddress;
+  return process.env.TRUST_PROXY==='1' ? text((req.headers['x-forwarded-for']||'').split(',').at(-1),64) || req.socket.remoteAddress : req.socket.remoteAddress;
 }
 function throttle(rate, key, limit, windowMs) {
   const time=Date.now(); const existing=rate.get(key);
@@ -98,7 +98,8 @@ function parseCoords(body, latKey='lat', lonKey='lon') {
 }
 function readIncident(db, ident) { return db.prepare(INCIDENT_SELECT+' WHERE i.id=?').get(ident); }
 const staticFiles = new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/styles.css','styles.css'],['/favicon.svg','favicon.svg'],['/vendor/awesomplete.js','vendor/awesomplete.js']]);
-const contentTypes = {html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',svg:'image/svg+xml'};
+for(const name of ['leaflet.js','leaflet.css','images/layers.png','images/layers-2x.png','images/marker-icon.png','images/marker-icon-2x.png','images/marker-shadow.png'])staticFiles.set('/vendor/leaflet/'+name,'vendor/leaflet/'+name);
+const contentTypes = {png:'image/png',html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',svg:'image/svg+xml'};
 
 export function createApp({databasePath=process.env.DATABASE_PATH || './data/flood-finder.sqlite', weatherFetch=globalThis.fetch}={}) {
   const db = connect(databasePath);
@@ -108,8 +109,16 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
   const locationCache=new Map(),weatherRequests=new Map();
   const hazardCache=new Map(),hazardRequests=new Map(),getHazards=createHazardService(weatherFetch);
   const broadcast = message => { for (const stream of streams) { try {stream.write(`event: change\ndata: ${JSON.stringify(message)}\n\n`);}catch{streams.delete(stream);} } };
+  let draining=false;
+  const maintenance=setInterval(()=>{
+    const time=Date.now();
+    for(const [key,value] of rate)if(value.reset<time)rate.delete(key);
+    db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now());
+  },60000);maintenance.unref();
   const handler=async(req,res)=>{
     Object.entries(baseHeaders).forEach(([key,val])=>res.setHeader(key,val));
+    if(process.env.NODE_ENV==='production')res.setHeader('Strict-Transport-Security','max-age=31536000');
+    if(draining)return response(res,503,{error:'Service restarting. Please try again shortly.'},{'Retry-After':'5'});
     try {
       const url=new URL(req.url,'http://internal');
       const path=url.pathname;
@@ -118,7 +127,10 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
         const source=await readFile(join(HERE,'public',name));
         res.writeHead(200,{'Content-Type':contentTypes[ext],'Cache-Control':ext==='html'?'no-cache':'public, max-age=300'});res.end(source);return;
       }
-      if(req.method==='GET' && path==='/api/health') return response(res,200,{ok:true,service:'flood-finder',time:now()});
+      if(req.method==='GET' && ['/api/health','/api/ready'].includes(path)) {
+        try {db.prepare('SELECT 1 FROM users LIMIT 1').get();return response(res,200,{ok:true,service:'flood-finder',time:now()});}
+        catch {return response(res,503,{ok:false,service:'flood-finder'});}
+      }
       if(!path.startsWith('/api/')) return response(res,404,{error:'Not found'});
       const ip=ipAddress(req);
       if(req.method!=='GET' && req.method!=='HEAD') {
@@ -453,12 +465,25 @@ export function createApp({databasePath=process.env.DATABASE_PATH || './data/flo
     }
   };
   const server=http.createServer(handler);
-  server.on('close',()=>{for(const stream of streams)stream.end();db.close();});
-  return {server,db};
+  server.headersTimeout=15000;
+  server.requestTimeout=30000;
+  server.on('close',()=>{clearInterval(maintenance);for(const stream of streams)stream.end();db.close();});
+  const shutdown=()=>{
+    draining=true;
+    for(const stream of streams)stream.end();
+    const closed=new Promise(resolve=>server.close(resolve));
+    server.closeIdleConnections();
+    const deadline=setTimeout(()=>server.closeAllConnections(),10000);deadline.unref();
+    return closed.finally(()=>clearTimeout(deadline));
+  };
+  return {server,db,shutdown};
 }
 if(process.argv[1] && fileURLToPath(import.meta.url)===process.argv[1]) {
-  const {server,db}=createApp();
+  const {server,shutdown}=createApp();
   const port=Number(process.env.PORT||3000);
   server.listen(port,()=>console.log(`Flood Finder listening on http://localhost:${port}`));
-  const cleanup=setInterval(()=>db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now()),3600000);cleanup.unref();
+  for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{
+    console.log(JSON.stringify({event:'shutdown',signal}));
+    shutdown().catch(error=>{console.error(error);process.exitCode=1;});
+  });
 }

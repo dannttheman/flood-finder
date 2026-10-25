@@ -1,7 +1,7 @@
 name: Flood Finder checks
 on:
   push:
-    branches: [flood-finder-v2-weather-addresses]
+    branches: [main, flood-finder-v2-weather-addresses]
   pull_request:
 permissions:
   contents: read
@@ -14,3 +14,10 @@ jobs:
         with:
           node-version: 24.15.0
       - run: npm test
+      - run: docker build -t flood-finder:check .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install cfn-lint==1.58.0
+      - run: python deploy/aws/generate-stack.py && git diff --exit-code deploy/aws/stack.json
+      - run: cfn-lint deploy/aws/stack.json

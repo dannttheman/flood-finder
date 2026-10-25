@@ -1,0 +1,12 @@
+{
+  email {$ACME_EMAIL}
+}
+{$DOMAIN} {
+  encode zstd gzip
+  reverse_proxy app:3000 {
+    flush_interval -1
+    # Replace client-supplied forwarded headers; app trusts only this proxy.
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+}
