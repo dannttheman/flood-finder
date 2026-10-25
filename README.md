@@ -1,6 +1,6 @@
 # Flood Finder
 
-A map for finding nearby hazards and reporting local disruptions: flooding, blocked roads, outages, storm debris, shelter needs, and safety concerns.
+An operational monitoring tool for teams responsible for tracking severe-weather impacts and accounting for reported incidents. Flood Finder maps user-submitted reports alongside public weather-related hazard data, with source labels, review histories, and response assignment tracking.
 
 The **Local Hazard Map** draft combines two clearly labeled sources:
 - **Official areas:** active National Weather Service warnings, watches, advisories, and relevant statements. These are shaded regions, not invented incident pins.
@@ -43,7 +43,7 @@ There is no React, TypeScript, Python application server, or npm runtime depende
 1. Install a supported Node.js version.
 2. Open this version's source folder in Terminal.
 3. Run `PORT=3002 npm start`.
-4. Open **http://localhost:3002**. The welcome page is the initial view; choose **Explore your area** to open the map.
+4. Open **http://localhost:3002**. The welcome page is the initial view; choose **Open incident monitoring** to open the map.
 
 `npm start` alone defaults to port 3000. Use port 3002 for this draft when another local version is already running. No `npm install`, government-data API key, or separate database account is required. Internet access is needed for map assets, tiles, address lookup, and official hazard data.
 

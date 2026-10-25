@@ -17,7 +17,7 @@ test('readiness, consistent online backup, persistence, and shutdown with a live
     const base=`http://127.0.0.1:${app.server.address().port}`;
     assert.equal((await fetch(base+'/api/ready')).status,200);
     const page=await fetch(base+'/');
-    assert.match(await page.text(),/A clearer picture/);
+    assert.match(await page.text(),/Monitor the event/);
     assert.match(page.headers.get('content-security-policy'),/frame-ancestors 'none'/);
     for(const [asset,type] of [['/vendor/leaflet/leaflet.js','text/javascript'],['/vendor/leaflet/leaflet.css','text/css'],['/vendor/leaflet/images/marker-icon.png','image/png']]){
       const file=await fetch(base+asset);assert.equal(file.status,200);assert.ok(file.headers.get('content-type').startsWith(type));await file.arrayBuffer();

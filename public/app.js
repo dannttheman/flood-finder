@@ -87,7 +87,7 @@ function route(){
     initializeMap();setTimeout(()=>{state.map?.invalidateSize();},90);
     renderIncidents();renderHazards();
   }
-  document.title = `Flood Finder | ${{home:'Local knowledge, shared clearly',map:'Local Hazard Map',about:'About',help:'How it works',privacy:'Privacy',terms:'Responsible use',admin:'Command center',tasks:'My assignments'}[target]}`;
+  document.title = `Flood Finder | ${{home:'Severe-weather incident monitoring',map:'Local Hazard Map',about:'About',help:'How it works',privacy:'Privacy',terms:'Responsible use',admin:'Command center',tasks:'My assignments'}[target]}`;
   if(target==='admin')renderAdmin();
   if(target==='tasks')renderAssignments();
   window.scrollTo({top:0,behavior:'instant'});
