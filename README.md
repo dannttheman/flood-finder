@@ -1,5 +1,6 @@
-# Flood Finder
-<img width="4000" height="1080" alt="flood finder" src="https://github.com/user-attachments/assets/767455df-18ed-4cbf-bceb-0e062e0300bd" />
+# Flood Finder | floodfinderusa.com
+<img width="1726" height="996" alt="Screenshot 2026-10-25 at 8 40 16 PM" src="https://github.com/user-attachments/assets/27984f4f-17ff-41cb-a380-a218a17ba5f1" />
+
 
 
 Monitoring tool for finding nearby hazards and reporting local disruptions: flooding, blocked roads, outages, storm debris, shelter needs, and safety concerns.
@@ -40,52 +41,7 @@ Weather is supporting evidence for affected areas. The main interface is the map
 
 There is no React, TypeScript, Python application server, or npm runtime dependency to install. Development scripts used to edit files are not part of the application runtime.
 
-## Run locally
 
-1. Install a supported Node.js version.
-2. Open this version's source folder in Terminal.
-3. Run `PORT=3002 npm start`.
-4. Open **http://localhost:3002**. The map is the initial view.
-
-`npm start` alone defaults to port 3000. Use port 3002 for this draft when another local version is already running. No `npm install`, government-data API key, or separate database account is required. Internet access is needed for map assets, tiles, address lookup, and official hazard data.
-
-Local accounts, sessions, and community reports are saved in `data/flood-finder.sqlite`. Runtime data is ignored by Git and is not copied between the local versions. Keep the server running while using the local preview; stop it with Control+C.
-
-Run `npm test` for the automated checks. The tests use temporary databases and mock government responses rather than depending on live emergencies.
-
-## Administrator setup
-
-Register normally in the app first. In the same source folder and with the same database setting, run:
-
-```sh
-npm run admin -- promote your-registered-email@example.com
-```
-
-Sign in again afterward. Registration creates a resident account; it never grants administrator access. Administrators can review incidents, set roles, create teams, and assign work. Team leads use My assignments.
-
-## Current draft names
-
-- `main`: original project.
-- `community-interface`: earlier interface draft.
-- `flood-finder-v2-weather-addresses`: current map-focused draft; requested rename to `local-hazard-map` is pending browser access.
-
-Draft comparisons are alternatives for review against `main`; do not merge both without reviewing the combined result. Previous branch names and historical drafts are recorded in [Versions](docs/VERSIONS.md).
-
-## Configuration
-
-Use `.env.example` as a reference. Node does not automatically load `.env`; use shell/provider environment variables or `node --env-file=.env server.js`.
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PORT` | `3000` | HTTP port |
-| `DATABASE_PATH` | `./data/flood-finder.sqlite` | Persistent SQLite file |
-| `NODE_ENV` | `development` | `production` makes session cookies HTTPS-only |
-| `TRUST_PROXY` | `0` | Only enable behind a trusted proxy that overwrites forwarded headers |
-| `NWS_USER_AGENT` | Application identifier | Set an appropriate public project contact before publishing |
-| `NWS_AREAS` | `FL` | Legacy statewide `/api/alerts` endpoint; the main local hazard map discovers the selected location's state |
-| `OSRM_URL` | Public OSRM demo endpoint | Estimated team routing; not a guaranteed production service |
-
-No publishing occurs as part of the current draft. See the publishing plan before choosing hosting or paying for resources. The existing Render file is a proposal, not a deployment.
 
 ## Scope and limitations
 
